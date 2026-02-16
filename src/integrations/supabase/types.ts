@@ -120,6 +120,7 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          priority: string
           service_radius_miles: number
           specialty: string[] | null
           state: string
@@ -138,6 +139,7 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          priority?: string
           service_radius_miles?: number
           specialty?: string[] | null
           state: string
@@ -156,6 +158,7 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          priority?: string
           service_radius_miles?: number
           specialty?: string[] | null
           state?: string

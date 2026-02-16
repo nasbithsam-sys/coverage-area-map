@@ -164,6 +164,9 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
     }
   }, [technicians, showPins, onTechClick]);
 
+  // Priority sort helper: best first, normal middle, last at end
+  const priorityOrder = (p: string) => p === "best" ? 0 : p === "last" ? 2 : 1;
+
   // Search handler using Nominatim
   const handleSearch = async () => {
     if (!searchQuery.trim() || !leafletMap.current) return;
@@ -186,10 +189,23 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
         const withDist = activeTechs.map((t) => ({
           tech: t,
           dist: getDistanceMiles(searchLat, searchLon, t.latitude, t.longitude),
+          priority: (t as any).priority || "normal",
         }));
-        withDist.sort((a, b) => a.dist - b.dist);
 
-        const nearest = withDist.filter((d) => d.dist <= 100).slice(0, 5);
+        // Sort by priority first, then distance
+        withDist.sort((a, b) => {
+          const pa = priorityOrder(a.priority);
+          const pb = priorityOrder(b.priority);
+          if (pa !== pb) return pa - pb;
+          return a.dist - b.dist;
+        });
+
+        // Find techs in radius first, if none found show top 10 nearest regardless of radius
+        let nearest = withDist.filter((d) => d.dist <= d.tech.service_radius_miles);
+        if (nearest.length === 0) {
+          nearest = withDist.slice(0, 10);
+        }
+
         if (nearest.length > 0 && showPins) {
           const bounds = L.latLngBounds(
             nearest.map((n) => [n.tech.latitude, n.tech.longitude] as [number, number])
