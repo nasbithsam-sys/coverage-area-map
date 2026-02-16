@@ -98,6 +98,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
 
     if (!tech) {
       payload.created_by = user?.id;
+      payload.is_new = true;
     }
 
     if (tech) {

@@ -150,8 +150,9 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
           fillOpacity: 0.9,
         });
 
+        const newTag = (tech as any).is_new ? ' <span style="color:#22c55e;font-weight:bold;">★ NEW</span>' : '';
         marker.bindTooltip(
-          `<strong>${tech.name}</strong><br/>${tech.city}, ${tech.state}`,
+          `<strong>${tech.name}</strong>${newTag}<br/>${tech.city}, ${tech.state}`,
           { direction: "top" }
         );
 
@@ -192,8 +193,11 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
           priority: (t as any).priority || "normal",
         }));
 
-        // Sort by priority first, then distance
+        // Sort: new techs first, then by priority, then distance
         withDist.sort((a, b) => {
+          const aNew = (a.tech as any).is_new ? 0 : 1;
+          const bNew = (b.tech as any).is_new ? 0 : 1;
+          if (aNew !== bNew) return aNew - bNew;
           const pa = priorityOrder(a.priority);
           const pb = priorityOrder(b.priority);
           if (pa !== pb) return pa - pb;
