@@ -1,6 +1,9 @@
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -33,7 +36,7 @@ function milesToMeters(miles: number) {
 export default function USMap({ technicians, showPins = false, onTechClick }: USMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
-  const markersRef = useRef<L.LayerGroup | null>(null);
+  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const zonesRef = useRef<L.LayerGroup | null>(null);
   const radiusRef = useRef<L.LayerGroup | null>(null);
   const [zones, setZones] = useState<CoverageZone[]>([]);
@@ -64,9 +67,31 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
       maxZoom: 19,
     }).addTo(map);
 
-    markersRef.current = L.layerGroup().addTo(map);
     zonesRef.current = L.layerGroup().addTo(map);
     radiusRef.current = L.layerGroup().addTo(map);
+
+    // Create cluster group with custom styling
+    clusterRef.current = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        let size = "small";
+        let dim = 36;
+        if (count >= 100) { size = "large"; dim = 52; }
+        else if (count >= 10) { size = "medium"; dim = 44; }
+
+        return L.divIcon({
+          html: `<div class="cluster-marker cluster-${size}"><span>${count}</span></div>`,
+          className: "",
+          iconSize: L.point(dim, dim),
+        });
+      },
+    });
+    map.addLayer(clusterRef.current);
+
     leafletMap.current = map;
 
     return () => {
@@ -96,8 +121,8 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
 
   // Draw tech markers & service radius
   useEffect(() => {
-    if (!markersRef.current || !radiusRef.current) return;
-    markersRef.current.clearLayers();
+    if (!clusterRef.current || !radiusRef.current) return;
+    clusterRef.current.clearLayers();
     radiusRef.current.clearLayers();
 
     const activeTechs = technicians.filter((t) => t.is_active);
@@ -134,7 +159,7 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
           onTechClick?.(tech);
         });
 
-        marker.addTo(markersRef.current!);
+        clusterRef.current!.addLayer(marker);
       });
     }
   }, [technicians, showPins, onTechClick]);
@@ -155,10 +180,8 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
         const searchLat = parseFloat(lat);
         const searchLon = parseFloat(lon);
 
-        // Zoom to location
         leafletMap.current.setView([searchLat, searchLon], 12, { animate: true });
 
-        // Find nearest techs
         const activeTechs = technicians.filter((t) => t.is_active);
         const withDist = activeTechs.map((t) => ({
           tech: t,
@@ -166,17 +189,14 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
         }));
         withDist.sort((a, b) => a.dist - b.dist);
 
-        // Show nearest tech if any within 100 miles
         const nearest = withDist.filter((d) => d.dist <= 100).slice(0, 5);
         if (nearest.length > 0 && showPins) {
-          // Highlight nearest techs
           const bounds = L.latLngBounds(
             nearest.map((n) => [n.tech.latitude, n.tech.longitude] as [number, number])
           );
           bounds.extend([searchLat, searchLon]);
           leafletMap.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 11 });
 
-          // Click the closest one
           if (onTechClick) {
             onTechClick(nearest[0].tech);
           }
