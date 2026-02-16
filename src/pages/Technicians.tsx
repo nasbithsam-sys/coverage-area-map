@@ -27,7 +27,7 @@ const PRIORITY_LABELS: Record<string, string> = {
 };
 
 export default function Technicians() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { toast } = useToast();
   const [technicians, setTechnicians] = useState<Tables<"technicians">[]>([]);
   const [search, setSearch] = useState("");
@@ -66,7 +66,7 @@ export default function Technicians() {
   };
 
   const logActivity = async (action: string, entity: string, entityId: string, details: Record<string, unknown>) => {
-    if (!user) return;
+    if (!user || role === "admin") return;
     await supabase.from("activity_log").insert([{
       user_id: user.id,
       action_type: action,
