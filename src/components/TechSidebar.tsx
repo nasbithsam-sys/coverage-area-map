@@ -25,7 +25,7 @@ export default function TechSidebar({ technicians, selectedTech, onSelect, onClo
   );
 
   return (
-    <aside className="w-80 border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col">
+    <aside className="w-full md:w-80 border-l-0 md:border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col h-full">
       {selectedTech ? (
         <div className="p-5 space-y-5 animate-fade-in">
           <div className="flex items-start justify-between">
