@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Copy, Eye, EyeOff, RefreshCw, QrCode } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Copy, Eye, EyeOff, RefreshCw, QrCode, Trash2, KeyRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -37,6 +37,32 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
   const [newRole, setNewRole] = useState<AppRole>("csr");
   const [creating, setCreating] = useState(false);
   const [totpDialog, setTotpDialog] = useState<{ open: boolean; uri: string; secret: string } | null>(null);
+
+  // Delete user state
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; userId: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Change password state
+  const [passwordDialog, setPasswordDialog] = useState<{ open: boolean; userId: string; name: string } | null>(null);
+  const [changePassword, setChangePassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const callManageUser = async (body: Record<string, string>) => {
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-manage-user`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify(body),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+  };
 
   const changeRole = async (userId: string, newRole: AppRole) => {
     const { error } = await supabase
@@ -77,7 +103,6 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // If admin role, auto-generate TOTP
       if (newRole === "admin") {
         await setupTotp(data.user_id);
       }
@@ -131,6 +156,37 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
     } else {
       toast({ title: "OTP regenerated", description: `New code: ${newOtp}` });
       onRefresh();
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteDialog) return;
+    setDeleting(true);
+    try {
+      await callManageUser({ action: "delete", user_id: deleteDialog.userId });
+      toast({ title: "User deleted", description: `${deleteDialog.name} has been removed.` });
+      setDeleteDialog(null);
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordDialog || !changePassword) return;
+    setChangingPassword(true);
+    try {
+      await callManageUser({ action: "change_password", user_id: passwordDialog.userId, new_password: changePassword });
+      toast({ title: "Password updated", description: `Password changed for ${passwordDialog.name}.` });
+      setPasswordDialog(null);
+      setChangePassword("");
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -260,14 +316,34 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
                   </TableCell>
                   <TableCell>
                     {u.user_id !== user?.id ? (
-                      <Select value={u.role} onValueChange={(v) => changeRole(u.user_id, v as AppRole)}>
-                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="marketing">Marketing</SelectItem>
-                          <SelectItem value="csr">CSR</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Select value={u.role} onValueChange={(v) => changeRole(u.user_id, v as AppRole)}>
+                          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="marketing">Marketing</SelectItem>
+                            <SelectItem value="csr">CSR</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Change Password"
+                          onClick={() => setPasswordDialog({ open: true, userId: u.user_id, name: u.profile?.full_name || u.profile?.email || "User" })}
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          title="Delete User"
+                          onClick={() => setDeleteDialog({ open: true, userId: u.user_id, name: u.profile?.full_name || u.profile?.email || "User" })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ) : (
                       <span className="text-sm text-muted-foreground">You</span>
                     )}
@@ -312,6 +388,53 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
             </div>
             <Button className="w-full" onClick={() => setTotpDialog(null)}>Done</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog open={deleteDialog?.open || false} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{deleteDialog?.name}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={passwordDialog?.open || false} onOpenChange={(open) => { if (!open) { setPasswordDialog(null); setChangePassword(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong>{passwordDialog?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <Input
+                type="password"
+                placeholder="Min 6 characters"
+                value={changePassword}
+                onChange={(e) => setChangePassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setPasswordDialog(null); setChangePassword(""); }}>Cancel</Button>
+            <Button onClick={handleChangePassword} disabled={changingPassword || changePassword.length < 6}>
+              {changingPassword ? "Updating..." : "Update Password"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
