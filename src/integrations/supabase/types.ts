@@ -90,6 +90,7 @@ export type Database = {
           full_name: string | null
           id: string
           otp_code: string | null
+          totp_secret: string | null
           user_id: string
         }
         Insert: {
@@ -98,6 +99,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           otp_code?: string | null
+          totp_secret?: string | null
           user_id: string
         }
         Update: {
@@ -106,6 +108,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           otp_code?: string | null
+          totp_secret?: string | null
           user_id?: string
         }
         Relationships: []

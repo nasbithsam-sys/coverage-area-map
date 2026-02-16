@@ -2,19 +2,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import CoverageZoneManager from "@/components/CoverageZoneManager";
+import RoleManagement from "@/components/RoleManagement";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { format } from "date-fns";
-import { Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
 import type { Tables, Database } from "@/integrations/supabase/types";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -32,29 +26,17 @@ interface ActivityRow {
 interface UserWithRole {
   user_id: string;
   role: AppRole;
-  profile: { full_name: string | null; email: string | null; otp_code?: string | null } | null;
+  profile: { full_name: string | null; email: string | null; otp_code?: string | null; totp_secret?: string | null } | null;
 }
 
 const CHART_COLORS = ["hsl(217, 71%, 45%)", "hsl(150, 60%, 40%)", "hsl(43, 96%, 56%)", "hsl(0, 72%, 51%)"];
 
 export default function Admin() {
-  const { toast } = useToast();
-  const { user, session } = useAuth();
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [technicians, setTechnicians] = useState<Tables<"technicians">[]>([]);
-  const [visibleOtps, setVisibleOtps] = useState<Set<string>>(new Set());
 
-  // Create user form
-  const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newFullName, setNewFullName] = useState("");
-  const [newRole, setNewRole] = useState<AppRole>("csr");
-  const [creating, setCreating] = useState(false);
-
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
     const { data: actData } = await supabase
@@ -63,7 +45,7 @@ export default function Admin() {
       .order("created_at", { ascending: false })
       .limit(50);
 
-    const { data: profilesData } = await supabase.from("profiles").select("user_id, full_name, email, otp_code");
+    const { data: profilesData } = await supabase.from("profiles").select("user_id, full_name, email, otp_code, totp_secret");
     const profileMap = new Map((profilesData || []).map(p => [p.user_id, p]));
 
     setActivities(
@@ -84,87 +66,6 @@ export default function Admin() {
 
     const { data: techData } = await supabase.from("technicians").select("*");
     setTechnicians(techData || []);
-  };
-
-  const changeRole = async (userId: string, newRole: AppRole) => {
-    const { error } = await supabase
-      .from("user_roles")
-      .update({ role: newRole })
-      .eq("user_id", userId);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Role updated" });
-      fetchAll();
-    }
-  };
-
-  const createUser = async () => {
-    if (!newEmail || !newPassword || !newFullName) {
-      toast({ title: "All fields required", variant: "destructive" });
-      return;
-    }
-    setCreating(true);
-    try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({
-            email: newEmail,
-            password: newPassword,
-            fullName: newFullName,
-            role: newRole,
-          }),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      toast({
-        title: "User created",
-        description: `${newEmail} added as ${newRole}. OTP: ${data.otp_code}`,
-      });
-      setNewEmail("");
-      setNewPassword("");
-      setNewFullName("");
-      fetchAll();
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const regenerateOtp = async (userId: string) => {
-    const newOtp = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ otp_code: newOtp })
-      .eq("user_id", userId);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "OTP regenerated", description: `New code: ${newOtp}` });
-      fetchAll();
-    }
-  };
-
-  const toggleOtpVisibility = (userId: string) => {
-    setVisibleOtps(prev => {
-      const next = new Set(prev);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
-      return next;
-    });
-  };
-
-  const copyOtp = (otp: string) => {
-    navigator.clipboard.writeText(otp);
-    toast({ title: "Copied to clipboard" });
   };
 
   const techsByState = Object.entries(
@@ -277,117 +178,7 @@ export default function Admin() {
 
           {/* Role Management */}
           <TabsContent value="roles" className="space-y-4">
-            <Card>
-              <CardHeader><CardTitle>Create User</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Full Name</Label>
-                    <Input placeholder="John Doe" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input placeholder="user@company.com" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Password</Label>
-                    <Input placeholder="Set password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Role</Label>
-                    <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="marketing">Marketing</SelectItem>
-                        <SelectItem value="csr">CSR</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <Button className="mt-4" onClick={createUser} disabled={creating}>
-                  {creating ? "Creating..." : "Create User"}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>Users & Roles</CardTitle></CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>OTP Code</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((u) => (
-                      <TableRow key={u.user_id}>
-                        <TableCell>{u.profile?.full_name || "—"}</TableCell>
-                        <TableCell>{u.profile?.email || "—"}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="capitalize">{u.role}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
-                              {visibleOtps.has(u.user_id)
-                                ? (u.profile?.otp_code || "—")
-                                : "••••••"}
-                            </code>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => toggleOtpVisibility(u.user_id)}
-                            >
-                              {visibleOtps.has(u.user_id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </Button>
-                            {visibleOtps.has(u.user_id) && u.profile?.otp_code && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => copyOtp(u.profile!.otp_code!)}
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => regenerateOtp(u.user_id)}
-                              title="Regenerate OTP"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {u.user_id !== user?.id ? (
-                            <Select value={u.role} onValueChange={(v) => changeRole(u.user_id, v as AppRole)}>
-                              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="marketing">Marketing</SelectItem>
-                                <SelectItem value="csr">CSR</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">You</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <RoleManagement users={users} onRefresh={fetchAll} />
           </TabsContent>
         </Tabs>
       </div>
