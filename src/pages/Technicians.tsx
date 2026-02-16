@@ -140,7 +140,12 @@ export default function Technicians() {
             <TableBody>
               {filtered.map((tech) => (
                 <TableRow key={tech.id}>
-                  <TableCell className="font-medium">{tech.name}</TableCell>
+                  <TableCell className="font-medium">
+                    {tech.name}
+                    {(tech as any).is_new && (
+                      <Badge variant="default" className="ml-2 text-xs bg-green-600 hover:bg-green-700">NEW</Badge>
+                    )}
+                  </TableCell>
                   <TableCell>{tech.city}, {tech.state}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">

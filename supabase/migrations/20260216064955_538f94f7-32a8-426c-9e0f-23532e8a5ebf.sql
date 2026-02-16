@@ -1,0 +1,1 @@
+ALTER TABLE public.technicians ADD COLUMN is_new boolean NOT NULL DEFAULT false;
