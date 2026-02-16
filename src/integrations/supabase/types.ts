@@ -115,7 +115,6 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean
-          is_new: boolean
           latitude: number
           longitude: number
           name: string
@@ -135,7 +134,6 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
-          is_new?: boolean
           latitude: number
           longitude: number
           name: string
@@ -155,7 +153,6 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
-          is_new?: boolean
           latitude?: number
           longitude?: number
           name?: string
