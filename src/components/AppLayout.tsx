@@ -8,10 +8,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useState } from "react";
 
 const navItems = [
-  { path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "csr", "admin"] as const },
-  { path: "/technicians", label: "Technicians", icon: Users, roles: ["csr", "admin"] as const },
-  { path: "/admin", label: "Admin", icon: Shield, roles: ["admin"] as const },
-];
+{ path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "csr", "admin"] as const },
+{ path: "/technicians", label: "Technicians", icon: Users, roles: ["csr", "admin"] as const },
+{ path: "/admin", label: "Admin", icon: Shield, roles: ["admin"] as const }];
+
 
 function SidebarContent({ role, user, signOut, visibleNav, location, onNavigate }: any) {
   return (
@@ -28,7 +28,7 @@ function SidebarContent({ role, user, signOut, visibleNav, location, onNavigate 
         </div>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1 mt-2">
+      <nav className="flex-1 p-3 space-y-1 mt-2 text-primary-foreground">
         {visibleNav.map((item: any) => {
           const active = location.pathname === item.path;
           return (
@@ -38,8 +38,8 @@ function SidebarContent({ role, user, signOut, visibleNav, location, onNavigate 
                 <span className="flex-1">{item.label}</span>
                 {active && <ChevronRight className="h-3.5 w-3.5 opacity-40" />}
               </div>
-            </Link>
-          );
+            </Link>);
+
         })}
       </nav>
 
@@ -54,17 +54,17 @@ function SidebarContent({ role, user, signOut, visibleNav, location, onNavigate 
           variant="ghost"
           size="sm"
           className="w-full justify-start gap-2 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent text-xs h-8"
-          onClick={signOut}
-        >
+          onClick={signOut}>
+
           <LogOut className="h-3.5 w-3.5" />
           Sign Out
         </Button>
       </div>
-    </>
-  );
+    </>);
+
 }
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default function AppLayout({ children }: {children: React.ReactNode;}) {
   const { role, user, signOut } = useAuth();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -95,8 +95,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main className="flex-1 overflow-auto bg-background">{children}</main>
-      </div>
-    );
+      </div>);
+
   }
 
   return (
@@ -105,6 +105,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent {...sidebarProps} />
       </aside>
       <main className="flex-1 overflow-auto bg-background">{children}</main>
-    </div>
-  );
+    </div>);
+
 }
