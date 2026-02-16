@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -30,6 +31,9 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "kansas city,mo": { lat: 39.0997, lng: -94.5786 },
   "las vegas,nv": { lat: 36.1699, lng: -115.1398 },
   "columbus,oh": { lat: 39.9612, lng: -82.9988 },
+  "fort worth,tx": { lat: 32.7555, lng: -97.3308 },
+  "san antonio,tx": { lat: 29.4241, lng: -98.4936 },
+  "austin,tx": { lat: 30.2672, lng: -97.7431 },
 };
 
 function guessCoords(city: string, state: string) {
@@ -47,6 +51,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [priority, setPriority] = useState<string>((tech as any)?.priority || "normal");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -76,7 +81,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     const specialtyRaw = form.get("specialty") as string;
     const specialty = specialtyRaw ? specialtyRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-    const payload = {
+    const payload: any = {
       name: form.get("name") as string,
       phone: form.get("phone") as string || null,
       email: form.get("email") as string || null,
@@ -88,8 +93,12 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
       longitude,
       service_radius_miles: parseInt(form.get("radius") as string) || 25,
       notes: form.get("notes") as string || null,
-      created_by: tech ? undefined : user?.id,
+      priority,
     };
+
+    if (!tech) {
+      payload.created_by = user?.id;
+    }
 
     if (tech) {
       const { error } = await supabase.from("technicians").update(payload).eq("id", tech.id);
@@ -153,14 +162,27 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
           <Input id="longitude" name="longitude" type="number" step="any" placeholder="Auto-detect" defaultValue={tech?.longitude || ""} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="specialty">Specialties</Label>
           <Input id="specialty" name="specialty" placeholder="HVAC, Plumbing, ..." defaultValue={tech?.specialty?.join(", ") || ""} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="radius">Service Radius (miles)</Label>
+          <Label htmlFor="radius">Radius (miles)</Label>
           <Input id="radius" name="radius" type="number" defaultValue={tech?.service_radius_miles || 25} />
+        </div>
+        <div className="space-y-2">
+          <Label>Priority</Label>
+          <Select value={priority} onValueChange={setPriority}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="best">⭐ Best</SelectItem>
+              <SelectItem value="normal">Normal</SelectItem>
+              <SelectItem value="last">Last Priority</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div className="space-y-2">

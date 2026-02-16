@@ -3,14 +3,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import TechForm from "@/components/TechForm";
+import TechImport from "@/components/TechImport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, Power } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Plus, Search, Pencil, Power, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
+
+const PRIORITY_COLORS: Record<string, string> = {
+  best: "default",
+  normal: "secondary",
+  last: "outline",
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  best: "⭐ Best",
+  normal: "Normal",
+  last: "Last",
+};
 
 export default function Technicians() {
   const { user } = useAuth();
@@ -36,6 +50,17 @@ export default function Technicians() {
       await logActivity(tech.is_active ? "deactivated" : "activated", "technician", tech.id, {
         name: tech.name,
       });
+      fetchTechs();
+    }
+  };
+
+  const deleteTech = async (tech: Tables<"technicians">) => {
+    const { error } = await supabase.from("technicians").delete().eq("id", tech.id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      await logActivity("deleted", "technician", tech.id, { name: tech.name });
+      toast({ title: "Technician removed" });
       fetchTechs();
     }
   };
@@ -67,28 +92,31 @@ export default function Technicians() {
   return (
     <AppLayout>
       <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Technicians</h1>
             <p className="text-muted-foreground">Manage your technician roster</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingTech(null); }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" /> Add Technician
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>{editingTech ? "Edit Technician" : "Add Technician"}</DialogTitle>
-              </DialogHeader>
-              <TechForm
-                tech={editingTech}
-                onSaved={handleSaved}
-                logActivity={logActivity}
-              />
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2 flex-wrap">
+            <TechImport technicians={technicians} onImported={fetchTechs} />
+            <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingTech(null); }}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" /> Add Technician
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>{editingTech ? "Edit Technician" : "Add Technician"}</DialogTitle>
+                </DialogHeader>
+                <TechForm
+                  tech={editingTech}
+                  onSaved={handleSaved}
+                  logActivity={logActivity}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <div className="relative max-w-sm">
@@ -104,8 +132,9 @@ export default function Technicians() {
                 <TableHead>Location</TableHead>
                 <TableHead>Specialties</TableHead>
                 <TableHead>Radius</TableHead>
+                <TableHead>Priority</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-24">Actions</TableHead>
+                <TableHead className="w-28">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -121,6 +150,11 @@ export default function Technicians() {
                     </div>
                   </TableCell>
                   <TableCell>{tech.service_radius_miles} mi</TableCell>
+                  <TableCell>
+                    <Badge variant={(PRIORITY_COLORS[(tech as any).priority] || "secondary") as any}>
+                      {PRIORITY_LABELS[(tech as any).priority] || "Normal"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <Badge variant={tech.is_active ? "default" : "outline"}>
                       {tech.is_active ? "Active" : "Inactive"}
@@ -138,13 +172,34 @@ export default function Technicians() {
                       <Button variant="ghost" size="icon" onClick={() => toggleActive(tech)}>
                         <Power className="h-4 w-4" />
                       </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove {tech.name}?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete this technician. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteTech(tech)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No technicians found
                   </TableCell>
                 </TableRow>
