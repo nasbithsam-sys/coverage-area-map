@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
+import CoverageZoneManager from "@/components/CoverageZoneManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -49,14 +50,12 @@ export default function Admin() {
   }, []);
 
   const fetchAll = async () => {
-    // Fetch activity log
     const { data: actData } = await supabase
       .from("activity_log")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
     
-    // Fetch profiles for mapping
     const { data: profilesData } = await supabase.from("profiles").select("user_id, full_name, email");
     const profileMap = new Map((profilesData || []).map(p => [p.user_id, p]));
     
@@ -68,7 +67,6 @@ export default function Admin() {
       }))
     );
 
-    // Fetch user roles
     const { data: roleData } = await supabase.from("user_roles").select("user_id, role");
     setUsers(
       (roleData || []).map(r => ({
@@ -77,7 +75,6 @@ export default function Admin() {
       }))
     );
 
-    // Fetch technicians for analytics
     const { data: techData } = await supabase.from("technicians").select("*");
     setTechnicians(techData || []);
   };
@@ -97,10 +94,9 @@ export default function Admin() {
 
   const inviteUser = async () => {
     if (!inviteEmail) return;
-    // Sign up the user (they'll get an email)
     const { data, error } = await supabase.auth.signUp({
       email: inviteEmail,
-      password: crypto.randomUUID().slice(0, 12), // temporary password
+      password: crypto.randomUUID().slice(0, 12),
       options: { emailRedirectTo: window.location.origin },
     });
     if (error) {
@@ -115,7 +111,6 @@ export default function Admin() {
     }
   };
 
-  // Analytics data
   const techsByState = Object.entries(
     technicians.reduce<Record<string, number>>((acc, t) => {
       if (t.is_active) acc[t.state] = (acc[t.state] || 0) + 1;
@@ -142,6 +137,7 @@ export default function Admin() {
           <TabsList>
             <TabsTrigger value="activity">Activity Log</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="coverage">Coverage Zones</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
           </TabsList>
 
@@ -230,6 +226,11 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Coverage Zones */}
+          <TabsContent value="coverage" className="space-y-4">
+            <CoverageZoneManager />
           </TabsContent>
 
           {/* Role Management */}

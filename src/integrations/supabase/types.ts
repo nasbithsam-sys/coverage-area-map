@@ -44,6 +44,45 @@ export type Database = {
         }
         Relationships: []
       }
+      coverage_zones: {
+        Row: {
+          color_level: string
+          created_at: string
+          created_by: string | null
+          id: string
+          latitude: number
+          longitude: number
+          name: string
+          radius_miles: number
+          updated_at: string
+          zone_type: string
+        }
+        Insert: {
+          color_level?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          latitude: number
+          longitude: number
+          name: string
+          radius_miles?: number
+          updated_at?: string
+          zone_type?: string
+        }
+        Update: {
+          color_level?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          name?: string
+          radius_miles?: number
+          updated_at?: string
+          zone_type?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
