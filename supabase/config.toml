@@ -1,1 +1,4 @@
 project_id = "nvplotnfmirkqkpkzenw"
+
+[functions.admin-create-user]
+verify_jwt = false

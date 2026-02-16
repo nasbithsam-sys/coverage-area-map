@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Shield, ArrowRight, Zap, Eye, Users } from "lucide-react";
+import { MapPin, ArrowRight, Eye, Users, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
-  const { signIn, signUp } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -18,26 +18,32 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     const form = new FormData(e.currentTarget);
-    const { error } = await signIn(form.get("email") as string, form.get("password") as string);
-    setLoading(false);
-    if (error) {
-      toast({ title: "Login failed", description: error.message, variant: "destructive" });
-    } else {
-      navigate("/dashboard");
-    }
-  };
+    const email = form.get("email") as string;
+    const password = form.get("password") as string;
+    const otp = form.get("otp") as string;
 
-  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    const form = new FormData(e.currentTarget);
-    const { error } = await signUp(form.get("email") as string, form.get("password") as string, form.get("fullName") as string);
-    setLoading(false);
+    const { error } = await signIn(email, password);
     if (error) {
-      toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Check your email", description: "We sent a confirmation link to verify your account." });
+      setLoading(false);
+      toast({ title: "Login failed", description: error.message, variant: "destructive" });
+      return;
     }
+
+    // Verify OTP
+    const { data: otpValid, error: otpErr } = await supabase.rpc("verify_and_rotate_otp", {
+      _user_id: (await supabase.auth.getUser()).data.user!.id,
+      _otp: otp,
+    });
+
+    if (otpErr || !otpValid) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      toast({ title: "Invalid OTP", description: "Please contact your admin for a valid code.", variant: "destructive" });
+      return;
+    }
+
+    setLoading(false);
+    navigate("/dashboard");
   };
 
   return (
@@ -55,14 +61,12 @@ export default function Login() {
             </div>
             <span className="text-2xl font-bold tracking-tight">TechMap</span>
           </div>
-          
           <h1 className="text-4xl font-extrabold leading-tight tracking-tight mb-4">
             Technician Coverage<br />Intelligence Platform
           </h1>
           <p className="text-lg text-white/70 mb-12 max-w-md">
             Visualize, manage, and optimize your technician network across the entire United States.
           </p>
-
           <div className="space-y-5">
             {[
               { icon: Eye, label: "Real-time coverage visualization" },
@@ -83,7 +87,6 @@ export default function Login() {
       {/* Right panel - form */}
       <div className="flex-1 flex items-center justify-center bg-background px-6">
         <div className="w-full max-w-sm animate-fade-in">
-          {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-btn">
               <MapPin className="h-5 w-5 text-primary-foreground" />
@@ -96,53 +99,28 @@ export default function Login() {
             <p className="text-muted-foreground mt-1">Sign in to your account to continue</p>
           </div>
 
-          <Tabs defaultValue="signin">
-            <TabsList className="grid w-full grid-cols-2 mb-6 h-11 rounded-xl bg-muted/60">
-              <TabsTrigger value="signin" className="rounded-lg text-sm font-semibold data-[state=active]:shadow-sm">Sign In</TabsTrigger>
-              <TabsTrigger value="signup" className="rounded-lg text-sm font-semibold data-[state=active]:shadow-sm">Sign Up</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="signin">
-              <form onSubmit={handleSignIn} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="signin-email" className="text-sm font-semibold">Email</Label>
-                  <Input id="signin-email" name="email" type="email" required placeholder="you@company.com" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signin-password" className="text-sm font-semibold">Password</Label>
-                  <Input id="signin-password" name="password" type="password" required placeholder="••••••••" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
-                </div>
-                <Button type="submit" className="w-full h-11 rounded-xl gradient-btn text-sm" disabled={loading}>
-                  {loading ? "Signing in..." : (
-                    <span className="flex items-center gap-2">Sign In <ArrowRight className="h-4 w-4" /></span>
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name" className="text-sm font-semibold">Full Name</Label>
-                  <Input id="signup-name" name="fullName" required placeholder="John Doe" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email" className="text-sm font-semibold">Email</Label>
-                  <Input id="signup-email" name="email" type="email" required placeholder="you@company.com" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password" className="text-sm font-semibold">Password</Label>
-                  <Input id="signup-password" name="password" type="password" required minLength={6} placeholder="••••••••" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
-                </div>
-                <Button type="submit" className="w-full h-11 rounded-xl gradient-btn text-sm" disabled={loading}>
-                  {loading ? "Creating account..." : "Create Account"}
-                </Button>
-                <p className="text-xs text-muted-foreground flex items-center gap-1.5 justify-center">
-                  <Shield className="h-3.5 w-3.5" /> An admin must assign your role after signup
-                </p>
-              </form>
-            </TabsContent>
-          </Tabs>
+          <form onSubmit={handleSignIn} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
+              <Input id="email" name="email" type="email" required placeholder="you@company.com" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
+              <Input id="password" name="password" type="password" required placeholder="••••••••" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="otp" className="text-sm font-semibold">Authenticator Code</Label>
+              <Input id="otp" name="otp" type="text" required maxLength={6} placeholder="6-digit code" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors tracking-widest text-center font-mono" />
+            </div>
+            <Button type="submit" className="w-full h-11 rounded-xl gradient-btn text-sm" disabled={loading}>
+              {loading ? "Signing in..." : (
+                <span className="flex items-center gap-2">Sign In <ArrowRight className="h-4 w-4" /></span>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Contact your administrator for login credentials and OTP code
+            </p>
+          </form>
         </div>
       </div>
     </div>

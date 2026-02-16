@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { format } from "date-fns";
+import { Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
 import type { Tables, Database } from "@/integrations/supabase/types";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -31,19 +32,25 @@ interface ActivityRow {
 interface UserWithRole {
   user_id: string;
   role: AppRole;
-  profile: { full_name: string | null; email: string | null } | null;
+  profile: { full_name: string | null; email: string | null; otp_code?: string | null } | null;
 }
 
 const CHART_COLORS = ["hsl(217, 71%, 45%)", "hsl(150, 60%, 40%)", "hsl(43, 96%, 56%)", "hsl(0, 72%, 51%)"];
 
 export default function Admin() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [technicians, setTechnicians] = useState<Tables<"technicians">[]>([]);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<AppRole>("csr");
+  const [visibleOtps, setVisibleOtps] = useState<Set<string>>(new Set());
+
+  // Create user form
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newFullName, setNewFullName] = useState("");
+  const [newRole, setNewRole] = useState<AppRole>("csr");
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     fetchAll();
@@ -55,10 +62,10 @@ export default function Admin() {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
-    
-    const { data: profilesData } = await supabase.from("profiles").select("user_id, full_name, email");
+
+    const { data: profilesData } = await supabase.from("profiles").select("user_id, full_name, email, otp_code");
     const profileMap = new Map((profilesData || []).map(p => [p.user_id, p]));
-    
+
     setActivities(
       (actData || []).map(a => ({
         ...a,
@@ -92,23 +99,72 @@ export default function Admin() {
     }
   };
 
-  const inviteUser = async () => {
-    if (!inviteEmail) return;
-    const { data, error } = await supabase.auth.signUp({
-      email: inviteEmail,
-      password: crypto.randomUUID().slice(0, 12),
-      options: { emailRedirectTo: window.location.origin },
-    });
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+  const createUser = async () => {
+    if (!newEmail || !newPassword || !newFullName) {
+      toast({ title: "All fields required", variant: "destructive" });
       return;
     }
-    if (data.user) {
-      await supabase.from("user_roles").insert({ user_id: data.user.id, role: inviteRole });
-      toast({ title: "User invited", description: `${inviteEmail} added as ${inviteRole}` });
-      setInviteEmail("");
+    setCreating(true);
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            email: newEmail,
+            password: newPassword,
+            fullName: newFullName,
+            role: newRole,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({
+        title: "User created",
+        description: `${newEmail} added as ${newRole}. OTP: ${data.otp_code}`,
+      });
+      setNewEmail("");
+      setNewPassword("");
+      setNewFullName("");
+      fetchAll();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const regenerateOtp = async (userId: string) => {
+    const newOtp = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ otp_code: newOtp })
+      .eq("user_id", userId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "OTP regenerated", description: `New code: ${newOtp}` });
       fetchAll();
     }
+  };
+
+  const toggleOtpVisibility = (userId: string) => {
+    setVisibleOtps(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const copyOtp = (otp: string) => {
+    navigator.clipboard.writeText(otp);
+    toast({ title: "Copied to clipboard" });
   };
 
   const techsByState = Object.entries(
@@ -144,9 +200,7 @@ export default function Admin() {
           {/* Activity Log */}
           <TabsContent value="activity" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Recent Activity</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -162,13 +216,10 @@ export default function Admin() {
                       <TableRow key={a.id}>
                         <TableCell>{a.profile?.full_name || a.profile?.email || "Unknown"}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">{a.action_type}</Badge>{" "}
-                          {a.entity_type}
+                          <Badge variant="outline">{a.action_type}</Badge> {a.entity_type}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {a.details && typeof a.details === "object" && "name" in a.details
-                            ? String(a.details.name)
-                            : "—"}
+                          {a.details && typeof a.details === "object" && "name" in a.details ? String(a.details.name) : "—"}
                         </TableCell>
                         <TableCell className="text-sm">
                           {format(new Date(a.created_at), "MMM d, yyyy h:mm a")}
@@ -177,9 +228,7 @@ export default function Admin() {
                     ))}
                     {activities.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                          No activity yet
-                        </TableCell>
+                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No activity yet</TableCell>
                       </TableRow>
                     )}
                   </TableBody>
@@ -192,9 +241,7 @@ export default function Admin() {
           <TabsContent value="analytics" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
-                <CardHeader>
-                  <CardTitle>Technicians by State (Top 10)</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Technicians by State (Top 10)</CardTitle></CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={techsByState}>
@@ -207,18 +254,13 @@ export default function Admin() {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-
               <Card>
-                <CardHeader>
-                  <CardTitle>Active vs Inactive</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Active vs Inactive</CardTitle></CardHeader>
                 <CardContent className="flex justify-center">
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie data={pieData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label>
-                        {pieData.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i]} />
-                        ))}
+                        {pieData.map((_, i) => (<Cell key={i} fill={CHART_COLORS[i]} />))}
                       </Pie>
                       <Tooltip />
                     </PieChart>
@@ -236,25 +278,25 @@ export default function Admin() {
           {/* Role Management */}
           <TabsContent value="roles" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Invite User</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Create User</CardTitle></CardHeader>
               <CardContent>
-                <div className="flex gap-3 items-end">
-                  <div className="flex-1 space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      placeholder="user@company.com"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Full Name</Label>
+                    <Input placeholder="John Doe" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} />
                   </div>
-                  <div className="w-40 space-y-2">
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input placeholder="user@company.com" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Password</Label>
+                    <Input placeholder="Set password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
                     <Label>Role</Label>
-                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as AppRole)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Select value={newRole} onValueChange={(v) => setNewRole(v as AppRole)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="marketing">Marketing</SelectItem>
                         <SelectItem value="csr">CSR</SelectItem>
@@ -262,15 +304,15 @@ export default function Admin() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={inviteUser}>Invite</Button>
                 </div>
+                <Button className="mt-4" onClick={createUser} disabled={creating}>
+                  {creating ? "Creating..." : "Create User"}
+                </Button>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Users & Roles</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Users & Roles</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -278,7 +320,8 @@ export default function Admin() {
                       <TableHead>User</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Change Role</TableHead>
+                      <TableHead>OTP Code</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -290,14 +333,45 @@ export default function Admin() {
                           <Badge variant="secondary" className="capitalize">{u.role}</Badge>
                         </TableCell>
                         <TableCell>
-                          {u.user_id !== user?.id ? (
-                            <Select
-                              value={u.role}
-                              onValueChange={(v) => changeRole(u.user_id, v as AppRole)}
+                          <div className="flex items-center gap-2">
+                            <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+                              {visibleOtps.has(u.user_id)
+                                ? (u.profile?.otp_code || "—")
+                                : "••••••"}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => toggleOtpVisibility(u.user_id)}
                             >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
+                              {visibleOtps.has(u.user_id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </Button>
+                            {visibleOtps.has(u.user_id) && u.profile?.otp_code && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => copyOtp(u.profile!.otp_code!)}
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => regenerateOtp(u.user_id)}
+                              title="Regenerate OTP"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {u.user_id !== user?.id ? (
+                            <Select value={u.role} onValueChange={(v) => changeRole(u.user_id, v as AppRole)}>
+                              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="marketing">Marketing</SelectItem>
                                 <SelectItem value="csr">CSR</SelectItem>
