@@ -5,7 +5,6 @@ import AppLayout from "@/components/AppLayout";
 import USMap from "@/components/USMap";
 import TechSidebar from "@/components/TechSidebar";
 import type { Tables } from "@/integrations/supabase/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Users, Globe, TrendingUp } from "lucide-react";
 
 export default function Dashboard() {
@@ -27,79 +26,65 @@ export default function Dashboard() {
   const states = new Set(activeTechs.map((t) => t.state));
   const showPins = role === "csr" || role === "admin";
 
+  const stats = [
+    { label: "Total Techs", value: activeTechs.length, icon: Users, color: "text-primary" },
+    { label: "States Covered", value: states.size, icon: Globe, color: "text-accent" },
+    { label: "Active", value: activeTechs.length, icon: TrendingUp, color: "text-coverage-strong" },
+    { label: "Inactive", value: technicians.length - activeTechs.length, icon: MapPin, color: "text-coverage-weak" },
+  ];
+
   return (
     <AppLayout>
       <div className="flex h-screen">
-        <div className="flex-1 overflow-auto p-6 space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold">Coverage Map</h1>
-            <p className="text-muted-foreground">
-              {role === "marketing"
-                ? "View technician coverage density across the US"
-                : "Search locations and click markers to see technician details"}
-            </p>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Users className="h-4 w-4" /> Total Techs
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <p className="text-2xl font-bold">{activeTechs.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Globe className="h-4 w-4" /> States Covered
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <p className="text-2xl font-bold">{states.size}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" /> Active
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <p className="text-2xl font-bold">{activeTechs.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <MapPin className="h-4 w-4" /> Inactive
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <p className="text-2xl font-bold">{technicians.length - activeTechs.length}</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Map */}
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <div className="flex-1 overflow-auto">
+          <div className="p-6 lg:p-8 space-y-6">
+            {/* Header */}
+            <div className="animate-fade-in">
+              <h1 className="text-3xl font-extrabold tracking-tight">Coverage Map</h1>
+              <p className="text-muted-foreground mt-1">
+                {role === "marketing"
+                  ? "View technician coverage density across the US"
+                  : "Search locations and click markers to see technician details"}
+              </p>
             </div>
-          ) : (
-            <Card className="overflow-hidden">
-              <CardContent className="p-0 h-[600px]">
-                <USMap
-                  technicians={technicians}
-                  showPins={showPins}
-                  onTechClick={showPins ? setSelectedTech : undefined}
-                />
-              </CardContent>
-            </Card>
-          )}
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in stagger-1">
+              {stats.map((stat, i) => (
+                <div key={stat.label} className={`stat-card stagger-${i + 1}`}>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-lg bg-muted ${stat.color}`}>
+                        <stat.icon className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <p className="text-3xl font-extrabold tracking-tight">{stat.value}</p>
+                    <p className="text-xs font-medium text-muted-foreground mt-1 uppercase tracking-wider">{stat.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Map */}
+            <div className="animate-fade-in stagger-3">
+              {loading ? (
+                <div className="flex items-center justify-center h-64 map-container bg-card">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+                    <p className="text-sm text-muted-foreground">Loading map data...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="map-container h-[600px]">
+                  <USMap
+                    technicians={technicians}
+                    showPins={showPins}
+                    onTechClick={showPins ? setSelectedTech : undefined}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Tech sidebar for CSR/Admin */}

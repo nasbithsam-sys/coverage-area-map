@@ -4,9 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Shield } from "lucide-react";
+import { MapPin, Shield, ArrowRight, Zap, Eye, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
@@ -19,10 +18,7 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     const form = new FormData(e.currentTarget);
-    const { error } = await signIn(
-      form.get("email") as string,
-      form.get("password") as string
-    );
+    const { error } = await signIn(form.get("email") as string, form.get("password") as string);
     setLoading(false);
     if (error) {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
@@ -35,11 +31,7 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     const form = new FormData(e.currentTarget);
-    const { error } = await signUp(
-      form.get("email") as string,
-      form.get("password") as string,
-      form.get("fullName") as string
-    );
+    const { error } = await signUp(form.get("email") as string, form.get("password") as string, form.get("fullName") as string);
     setLoading(false);
     if (error) {
       toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
@@ -49,61 +41,110 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <MapPin className="h-6 w-6 text-primary" />
+    <div className="flex min-h-screen">
+      {/* Left panel - branding */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-white/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+        </div>
+        <div className="relative z-10 flex flex-col justify-center px-16 text-white">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+              <MapPin className="h-6 w-6" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight">TechMap</span>
           </div>
-          <CardTitle className="text-2xl font-bold">Tech Coverage Map</CardTitle>
-          <CardDescription>Manage your technician coverage across the USA</CardDescription>
-        </CardHeader>
-        <CardContent>
+          
+          <h1 className="text-4xl font-extrabold leading-tight tracking-tight mb-4">
+            Technician Coverage<br />Intelligence Platform
+          </h1>
+          <p className="text-lg text-white/70 mb-12 max-w-md">
+            Visualize, manage, and optimize your technician network across the entire United States.
+          </p>
+
+          <div className="space-y-5">
+            {[
+              { icon: Eye, label: "Real-time coverage visualization" },
+              { icon: Users, label: "Manage thousands of technicians" },
+              { icon: Zap, label: "Instant search & nearest tech finder" },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-3 text-white/80">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <span className="text-sm font-medium">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Right panel - form */}
+      <div className="flex-1 flex items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm animate-fade-in">
+          {/* Mobile logo */}
+          <div className="flex items-center gap-2 mb-8 lg:hidden">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-btn">
+              <MapPin className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <span className="text-xl font-bold tracking-tight">TechMap</span>
+          </div>
+
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
+            <p className="text-muted-foreground mt-1">Sign in to your account to continue</p>
+          </div>
+
           <Tabs defaultValue="signin">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-6 h-11 rounded-xl bg-muted/60">
+              <TabsTrigger value="signin" className="rounded-lg text-sm font-semibold data-[state=active]:shadow-sm">Sign In</TabsTrigger>
+              <TabsTrigger value="signup" className="rounded-lg text-sm font-semibold data-[state=active]:shadow-sm">Sign Up</TabsTrigger>
             </TabsList>
+
             <TabsContent value="signin">
-              <form onSubmit={handleSignIn} className="space-y-4 pt-4">
+              <form onSubmit={handleSignIn} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
-                  <Input id="signin-email" name="email" type="email" required placeholder="you@company.com" />
+                  <Label htmlFor="signin-email" className="text-sm font-semibold">Email</Label>
+                  <Input id="signin-email" name="email" type="email" required placeholder="you@company.com" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
-                  <Input id="signin-password" name="password" type="password" required placeholder="••••••••" />
+                  <Label htmlFor="signin-password" className="text-sm font-semibold">Password</Label>
+                  <Input id="signin-password" name="password" type="password" required placeholder="••••••••" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Signing in..." : "Sign In"}
+                <Button type="submit" className="w-full h-11 rounded-xl gradient-btn text-sm" disabled={loading}>
+                  {loading ? "Signing in..." : (
+                    <span className="flex items-center gap-2">Sign In <ArrowRight className="h-4 w-4" /></span>
+                  )}
                 </Button>
               </form>
             </TabsContent>
+
             <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4 pt-4">
+              <form onSubmit={handleSignUp} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
-                  <Input id="signup-name" name="fullName" required placeholder="John Doe" />
+                  <Label htmlFor="signup-name" className="text-sm font-semibold">Full Name</Label>
+                  <Input id="signup-name" name="fullName" required placeholder="John Doe" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input id="signup-email" name="email" type="email" required placeholder="you@company.com" />
+                  <Label htmlFor="signup-email" className="text-sm font-semibold">Email</Label>
+                  <Input id="signup-email" name="email" type="email" required placeholder="you@company.com" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input id="signup-password" name="password" type="password" required minLength={6} placeholder="••••••••" />
+                  <Label htmlFor="signup-password" className="text-sm font-semibold">Password</Label>
+                  <Input id="signup-password" name="password" type="password" required minLength={6} placeholder="••••••••" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full h-11 rounded-xl gradient-btn text-sm" disabled={loading}>
                   {loading ? "Creating account..." : "Create Account"}
                 </Button>
-                <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center">
-                  <Shield className="h-3 w-3" /> An admin must assign your role after signup
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5 justify-center">
+                  <Shield className="h-3.5 w-3.5" /> An admin must assign your role after signup
                 </p>
               </form>
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
