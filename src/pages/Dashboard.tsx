@@ -36,7 +36,7 @@ export default function Dashboard() {
             <p className="text-muted-foreground">
               {role === "marketing"
                 ? "View technician coverage density across the US"
-                : "Click on pins to see technician details"}
+                : "Search locations and click markers to see technician details"}
             </p>
           </div>
 
@@ -90,8 +90,8 @@ export default function Dashboard() {
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             </div>
           ) : (
-            <Card>
-              <CardContent className="p-4">
+            <Card className="overflow-hidden">
+              <CardContent className="p-0 h-[600px]">
                 <USMap
                   technicians={technicians}
                   showPins={showPins}
