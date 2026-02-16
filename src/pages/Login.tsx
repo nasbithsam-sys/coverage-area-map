@@ -29,17 +29,43 @@ export default function Login() {
       return;
     }
 
-    // Verify OTP
-    const { data: otpValid, error: otpErr } = await supabase.rpc("verify_and_rotate_otp", {
-      _user_id: (await supabase.auth.getUser()).data.user!.id,
-      _otp: otp,
+    const userId = (await supabase.auth.getUser()).data.user!.id;
+
+    // Check if admin → use TOTP, otherwise rotating OTP
+    const { data: isAdmin } = await supabase.rpc("has_role", {
+      _user_id: userId,
+      _role: "admin" as const,
     });
 
-    if (otpErr || !otpValid) {
-      await supabase.auth.signOut();
-      setLoading(false);
-      toast({ title: "Invalid OTP", description: "Please contact your admin for a valid code.", variant: "destructive" });
-      return;
+    if (isAdmin) {
+      // Verify TOTP via edge function
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-totp`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, totp_code: otp, action: "verify" }),
+        }
+      );
+      const data = await res.json();
+      if (!data.valid) {
+        await supabase.auth.signOut();
+        setLoading(false);
+        toast({ title: "Invalid authenticator code", description: "Check your Google Authenticator app.", variant: "destructive" });
+        return;
+      }
+    } else {
+      // Verify rotating OTP
+      const { data: otpValid, error: otpErr } = await supabase.rpc("verify_and_rotate_otp", {
+        _user_id: userId,
+        _otp: otp,
+      });
+      if (otpErr || !otpValid) {
+        await supabase.auth.signOut();
+        setLoading(false);
+        toast({ title: "Invalid OTP", description: "Please contact your admin for a valid code.", variant: "destructive" });
+        return;
+      }
     }
 
     setLoading(false);
