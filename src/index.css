@@ -212,6 +212,27 @@
     @apply relative;
   }
 
+  .cluster-marker {
+    @apply flex items-center justify-center rounded-full font-bold text-primary-foreground;
+    background: var(--gradient-primary);
+    box-shadow: 0 2px 10px hsl(230 80% 56% / 0.4);
+  }
+
+  .cluster-small {
+    @apply text-xs;
+    width: 36px; height: 36px;
+  }
+
+  .cluster-medium {
+    @apply text-sm;
+    width: 44px; height: 44px;
+  }
+
+  .cluster-large {
+    @apply text-base;
+    width: 52px; height: 52px;
+  }
+
   .pulse-dot::after {
     content: '';
     @apply absolute inset-0 rounded-full animate-ping;
