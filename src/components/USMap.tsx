@@ -108,27 +108,6 @@ function detectResultType(result: any): SearchResultType {
   return "city";
 }
 
-function getRadiusForType(resultType: SearchResultType, boundingbox?: string[]): number {
-  if (boundingbox) {
-    const south = parseFloat(boundingbox[0]);
-    const north = parseFloat(boundingbox[1]);
-    const west = parseFloat(boundingbox[2]);
-    const east = parseFloat(boundingbox[3]);
-    const latSpan = Math.abs(north - south);
-    const lonSpan = Math.abs(east - west);
-    const avgSpan = (latSpan + lonSpan) / 2;
-    const radiusKm = (avgSpan / 2) * 111;
-    const radiusM = radiusKm * 1000;
-    if (radiusM > 500) return radiusM;
-  }
-  switch (resultType) {
-    case "neighborhood": return 1500;
-    case "zip": return 3000;
-    case "city": return 8000;
-    case "state": return 100000;
-    default: return 5000;
-  }
-}
 
 function getDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3959;
@@ -209,13 +188,15 @@ const TILE_LAYERS = {
   street: {
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
+    maxZoom: 20,
+    maxNativeZoom: 19,
     label: "Street",
   },
   satellite: {
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     attribution: '&copy; Esri, Maxar, Earthstar Geographics',
-    maxZoom: 19,
+    maxZoom: 20,
+    maxNativeZoom: 19,
     label: "Satellite",
   },
 };
@@ -274,13 +255,14 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       center: [39.8283, -98.5795],
       zoom: 5,
       minZoom: 4,
-      maxZoom: 19,
+      maxZoom: 20,
       zoomControl: true,
     });
 
     const initialTile = L.tileLayer(TILE_LAYERS.street.url, {
       attribution: TILE_LAYERS.street.attribution,
       maxZoom: TILE_LAYERS.street.maxZoom,
+      maxNativeZoom: TILE_LAYERS.street.maxNativeZoom,
     }).addTo(map);
     tileLayerRef.current = initialTile;
 
@@ -321,9 +303,13 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
   useEffect(() => {
     if (!leafletMap.current || !tileLayerRef.current) return;
     const cfg = TILE_LAYERS[activeLayer];
-    tileLayerRef.current.setUrl(cfg.url);
-    tileLayerRef.current.options.attribution = cfg.attribution;
-    tileLayerRef.current.options.maxZoom = cfg.maxZoom;
+    leafletMap.current.removeLayer(tileLayerRef.current);
+    const newTile = L.tileLayer(cfg.url, {
+      attribution: cfg.attribution,
+      maxZoom: cfg.maxZoom,
+      maxNativeZoom: cfg.maxNativeZoom,
+    }).addTo(leafletMap.current);
+    tileLayerRef.current = newTile;
   }, [activeLayer]);
 
   // Draw coverage zones
@@ -405,7 +391,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
 
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ", USA")}&limit=1&addressdetails=1&polygon_geojson=1`
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ", USA")}&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.005`
       );
       const results = await res.json();
 
@@ -546,19 +532,8 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       searchLayerRef.current.addLayer(rect);
       leafletMap.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14, animate: true });
     } else {
-      // Last fallback: dashed circle
-      const radius = getRadiusForType(rType);
-      const circle = L.circle([lat, lon], {
-        radius: Math.max(radius, 1000),
-        color: "hsl(0, 72%, 51%)",
-        fillColor: "hsl(0, 72%, 51%)",
-        fillOpacity: 0.06,
-        weight: 2,
-        dashArray: "8 6",
-        interactive: false,
-      });
-      searchLayerRef.current.addLayer(circle);
-      leafletMap.current.fitBounds(circle.getBounds(), { padding: [50, 50], maxZoom: 14, animate: true });
+      // No polygon or bbox — just zoom to center
+      leafletMap.current.setView([lat, lon], 12, { animate: true });
     }
   }
 
