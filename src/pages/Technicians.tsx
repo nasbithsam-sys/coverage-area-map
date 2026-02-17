@@ -98,7 +98,7 @@ export default function Technicians() {
             <p className="text-muted-foreground">Manage your technician roster</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <TechImport technicians={technicians} onImported={fetchTechs} />
+            <TechImport technicians={technicians} onImported={fetchTechs} role={role} />
             <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingTech(null); }}>
               <DialogTrigger asChild>
                 <Button>

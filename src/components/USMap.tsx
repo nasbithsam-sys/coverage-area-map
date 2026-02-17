@@ -20,6 +20,7 @@ interface CoverageZone {
 interface USMapProps {
   technicians: Tables<"technicians">[];
   showPins?: boolean;
+  showSearch?: boolean;
   onTechClick?: (tech: Tables<"technicians">) => void;
 }
 
@@ -33,12 +34,13 @@ function milesToMeters(miles: number) {
   return miles * 1609.34;
 }
 
-export default function USMap({ technicians, showPins = false, onTechClick }: USMapProps) {
+export default function USMap({ technicians, showPins = false, showSearch = false, onTechClick }: USMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const zonesRef = useRef<L.LayerGroup | null>(null);
   const radiusRef = useRef<L.LayerGroup | null>(null);
+  const searchMarkerRef = useRef<L.LayerGroup | null>(null);
   const [zones, setZones] = useState<CoverageZone[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -69,6 +71,7 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
 
     zonesRef.current = L.layerGroup().addTo(map);
     radiusRef.current = L.layerGroup().addTo(map);
+    searchMarkerRef.current = L.layerGroup().addTo(map);
 
     // Create cluster group with custom styling
     clusterRef.current = L.markerClusterGroup({
@@ -127,17 +130,19 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
 
     const activeTechs = technicians.filter((t) => t.is_active);
 
-    // Service radius circles (visible to all)
-    activeTechs.forEach((tech) => {
-      L.circle([tech.latitude, tech.longitude], {
-        radius: milesToMeters(tech.service_radius_miles),
-        color: "hsl(217, 71%, 45%)",
-        fillColor: "hsl(217, 71%, 45%)",
-        fillOpacity: 0.06,
-        weight: 0.5,
-        interactive: false,
-      }).addTo(radiusRef.current!);
-    });
+    // Service radius circles (Processor/Admin only)
+    if (showPins) {
+      activeTechs.forEach((tech) => {
+        L.circle([tech.latitude, tech.longitude], {
+          radius: milesToMeters(tech.service_radius_miles),
+          color: "hsl(217, 71%, 45%)",
+          fillColor: "hsl(217, 71%, 45%)",
+          fillOpacity: 0.06,
+          weight: 0.5,
+          interactive: false,
+        }).addTo(radiusRef.current!);
+      });
+    }
 
     // Pins (Processor/Admin only)
     if (showPins) {
@@ -180,11 +185,48 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
       const results = await res.json();
 
       if (results.length > 0) {
-        const { lat, lon } = results[0];
+        const { lat, lon, boundingbox, type, display_name } = results[0];
         const searchLat = parseFloat(lat);
         const searchLon = parseFloat(lon);
 
         leafletMap.current.setView([searchLat, searchLon], 12, { animate: true });
+
+        // Clear previous search markers
+        searchMarkerRef.current?.clearLayers();
+
+        // Add a pin at the searched location
+        const searchPin = L.marker([searchLat, searchLon], {
+          icon: L.divIcon({
+            html: `<div style="width:24px;height:24px;background:hsl(0,72%,51%);border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
+            className: "",
+            iconSize: L.point(24, 24),
+            iconAnchor: L.point(12, 12),
+          }),
+        });
+        searchPin.bindTooltip(display_name || searchQuery, { direction: "top" });
+        searchMarkerRef.current?.addLayer(searchPin);
+
+        // Draw a dotted boundary circle around the searched area
+        if (boundingbox) {
+          const south = parseFloat(boundingbox[0]);
+          const north = parseFloat(boundingbox[1]);
+          const west = parseFloat(boundingbox[2]);
+          const east = parseFloat(boundingbox[3]);
+          const radiusM = leafletMap.current.distance(
+            [south, west],
+            [north, east]
+          ) / 2;
+          const areaCircle = L.circle([searchLat, searchLon], {
+            radius: Math.max(radiusM, 1000),
+            color: "hsl(0, 72%, 51%)",
+            fillColor: "hsl(0, 72%, 51%)",
+            fillOpacity: 0.06,
+            weight: 2,
+            dashArray: "8 6",
+            interactive: false,
+          });
+          searchMarkerRef.current?.addLayer(areaCircle);
+        }
 
         const activeTechs = technicians.filter((t) => t.is_active);
         const withDist = activeTechs.map((t) => ({
@@ -232,7 +274,7 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
   return (
     <div className="relative w-full h-full">
       {/* Search bar */}
-      {showPins && (
+      {showSearch && (
         <div className="absolute top-3 left-3 z-[1000] flex gap-2">
           <input
             type="text"
