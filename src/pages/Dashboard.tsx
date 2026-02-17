@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import USMap from "@/components/USMap";
+import type { USMapHandle, SearchResultsData } from "@/components/USMap";
 import TechSidebar from "@/components/TechSidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -12,9 +13,11 @@ import { MapPin, Users, Globe, TrendingUp } from "lucide-react";
 export default function Dashboard() {
   const { role } = useAuth();
   const isMobile = useIsMobile();
+  const mapRef = useRef<USMapHandle>(null);
   const [technicians, setTechnicians] = useState<Tables<"technicians">[]>([]);
   const [selectedTech, setSelectedTech] = useState<Tables<"technicians"> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchData, setSearchData] = useState<SearchResultsData | null>(null);
 
   useEffect(() => {
     async function fetchTechnicians() {
@@ -39,6 +42,29 @@ export default function Dashboard() {
   const handleTechSelect = (tech: Tables<"technicians">) => {
     setSelectedTech(tech);
   };
+
+  const handleSearchResults = useCallback((data: SearchResultsData | null) => {
+    setSearchData(data);
+    if (!data) setSelectedTech(null);
+  }, []);
+
+  const handleLocateTech = useCallback((tech: Tables<"technicians">) => {
+    mapRef.current?.locateTech(tech);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchData(null);
+    setSelectedTech(null);
+  }, []);
+
+  // Derive filtered tech IDs from search results
+  const filteredTechIds = useMemo(() => {
+    if (!searchData) return null;
+    return new Set(searchData.results.map((r) => r.tech.id));
+  }, [searchData]);
+
+  // Show sidebar when search results exist OR for showPins roles
+  const showSidebar = showPins || !!searchData;
 
   return (
     <AppLayout>
@@ -84,10 +110,13 @@ export default function Dashboard() {
               ) : (
                 <div className="map-container h-[350px] md:h-[500px] lg:h-[600px]">
                   <USMap
+                    ref={mapRef}
                     technicians={technicians}
                     showPins={showPins}
                     showSearch={true}
                     onTechClick={showPins ? handleTechSelect : undefined}
+                    onSearchResults={handleSearchResults}
+                    filteredTechIds={filteredTechIds}
                   />
                 </div>
               )}
@@ -95,24 +124,34 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tech sidebar - sheet on mobile, fixed on desktop */}
-        {showPins && !isMobile && (
+        {/* Tech sidebar */}
+        {showSidebar && !isMobile && (
           <TechSidebar
             technicians={technicians}
             selectedTech={selectedTech}
             onSelect={handleTechSelect}
             onClose={() => setSelectedTech(null)}
+            searchResults={searchData?.results}
+            searchResultType={searchData?.resultType}
+            searchQuery={searchData?.query}
+            onLocateTech={handleLocateTech}
+            onClearSearch={handleClearSearch}
           />
         )}
 
-        {showPins && isMobile && (
-          <Sheet open={!!selectedTech} onOpenChange={(o) => !o && setSelectedTech(null)}>
+        {showSidebar && isMobile && (
+          <Sheet open={!!selectedTech || !!searchData} onOpenChange={(o) => { if (!o) { setSelectedTech(null); setSearchData(null); } }}>
             <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl p-0">
               <TechSidebar
                 technicians={technicians}
                 selectedTech={selectedTech}
                 onSelect={handleTechSelect}
                 onClose={() => setSelectedTech(null)}
+                searchResults={searchData?.results}
+                searchResultType={searchData?.resultType}
+                searchQuery={searchData?.query}
+                onLocateTech={handleLocateTech}
+                onClearSearch={handleClearSearch}
               />
             </SheetContent>
           </Sheet>

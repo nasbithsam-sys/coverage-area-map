@@ -3,17 +3,34 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Search, X, Phone, Mail, MapPin, Wrench, Navigation } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Search, X, Phone, Mail, MapPin, Wrench, Navigation, Crosshair, Info, AlertTriangle } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import type { SearchResultItem } from "@/components/USMap";
 
 interface Props {
   technicians: Tables<"technicians">[];
   selectedTech: Tables<"technicians"> | null;
   onSelect: (tech: Tables<"technicians">) => void;
   onClose: () => void;
+  searchResults?: SearchResultItem[] | null;
+  searchResultType?: string | null;
+  searchQuery?: string | null;
+  onLocateTech?: (tech: Tables<"technicians">) => void;
+  onClearSearch?: () => void;
 }
 
-export default function TechSidebar({ technicians, selectedTech, onSelect, onClose }: Props) {
+export default function TechSidebar({
+  technicians,
+  selectedTech,
+  onSelect,
+  onClose,
+  searchResults,
+  searchResultType,
+  searchQuery,
+  onLocateTech,
+  onClearSearch,
+}: Props) {
   const [search, setSearch] = useState("");
 
   const filtered = technicians.filter(
@@ -24,9 +41,13 @@ export default function TechSidebar({ technicians, selectedTech, onSelect, onClo
         t.state.toLowerCase().includes(search.toLowerCase()))
   );
 
-  return (
-    <aside className="w-full md:w-80 border-l-0 md:border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col h-full">
-      {selectedTech ? (
+  const hasFallback = searchResults?.some((r) => r.isFallback) ?? false;
+  const isSearchMode = searchResults && searchResults.length > 0;
+
+  // Selected tech detail view
+  if (selectedTech && !isSearchMode) {
+    return (
+      <aside className="w-full md:w-80 border-l-0 md:border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col h-full">
         <div className="p-5 space-y-5 animate-fade-in">
           <div className="flex items-start justify-between">
             <div>
@@ -95,50 +116,177 @@ export default function TechSidebar({ technicians, selectedTech, onSelect, onClo
             )}
           </div>
         </div>
-      ) : (
-        <>
-          <div className="p-4 border-b border-border/50">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search technicians..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-10 rounded-xl bg-muted/30 border-border/50"
-              />
-            </div>
+      </aside>
+    );
+  }
+
+  // Search results mode
+  if (isSearchMode) {
+    return (
+      <aside className="w-full md:w-80 border-l-0 md:border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col h-full">
+        {/* Header */}
+        <div className="p-4 border-b border-border/50">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-bold text-sm tracking-tight">
+              Search Results
+              <span className="ml-1.5 text-muted-foreground font-normal">({searchResults.length})</span>
+            </h3>
+            <Button variant="ghost" size="sm" onClick={onClearSearch} className="h-7 px-2 text-xs">
+              <X className="h-3 w-3 mr-1" /> Clear
+            </Button>
           </div>
-          <ScrollArea className="flex-1">
-            <div className="p-2 space-y-0.5">
-              {filtered.map((tech) => (
-                <button
-                  key={tech.id}
-                  onClick={() => onSelect(tech)}
-                  className="w-full text-left p-3 rounded-xl hover:bg-muted/50 transition-all duration-200 group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                      {tech.name.charAt(0)}
+          {searchQuery && (
+            <p className="text-xs text-muted-foreground truncate">
+              {searchResultType === "state" ? "State" : searchResultType === "city" ? "City" : searchResultType === "zip" ? "ZIP" : searchResultType === "neighborhood" ? "Neighborhood" : "Location"}
+              : "{searchQuery}"
+            </p>
+          )}
+        </div>
+
+        {/* Fallback banner */}
+        {hasFallback && (
+          <div className="mx-4 mt-3 p-2.5 rounded-lg bg-muted/60 border border-border/50 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              No exact matches found. Showing nearest technicians.
+            </p>
+          </div>
+        )}
+
+        {/* Results list with accordion */}
+        <ScrollArea className="flex-1">
+          <Accordion type="single" collapsible className="px-2 py-2">
+            {searchResults.map((item) => (
+              <AccordionItem key={item.tech.id} value={item.tech.id} className="border-b-0">
+                <div className="flex items-center gap-1 px-1">
+                  {/* Locate button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() => onLocateTech?.(item.tech)}
+                    title="Locate on map"
+                  >
+                    <Crosshair className="h-3.5 w-3.5 text-primary" />
+                  </Button>
+
+                  <AccordionTrigger className="flex-1 py-2.5 hover:no-underline">
+                    <div className="flex items-center gap-2 min-w-0 text-left">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                        {item.tech.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-sm truncate">{item.tech.name}</p>
+                          <Badge
+                            variant={item.tech.is_active ? "default" : "secondary"}
+                            className="text-[10px] px-1.5 py-0 h-4 shrink-0"
+                          >
+                            {item.tech.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="truncate">
+                            {item.tech.city}, {item.tech.state} {item.tech.zip}
+                          </span>
+                          <span className="shrink-0 font-medium text-primary">
+                            {item.distanceMiles.toFixed(1)} mi
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">{tech.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {tech.city}, {tech.state}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {filtered.length === 0 && (
-                <div className="text-center py-12">
-                  <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No technicians found</p>
+                  </AccordionTrigger>
                 </div>
-              )}
+
+                <AccordionContent className="pl-10 pr-2 pb-3">
+                  <div className="space-y-2.5">
+                    {item.tech.phone && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span>{item.tech.phone}</span>
+                      </div>
+                    )}
+                    {item.tech.email && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="truncate">{item.tech.email}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <Navigation className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>{item.tech.service_radius_miles} mile radius</span>
+                    </div>
+                    {item.tech.specialty && item.tech.specialty.length > 0 && (
+                      <div>
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Specialties</p>
+                        <div className="flex flex-wrap gap-1">
+                          {item.tech.specialty.map((s) => (
+                            <Badge key={s} variant="secondary" className="text-[10px] rounded px-1.5 py-0.5">
+                              {s}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {item.tech.notes && (
+                      <div>
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Notes</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">{item.tech.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </ScrollArea>
+      </aside>
+    );
+  }
+
+  // Default mode
+  return (
+    <aside className="w-full md:w-80 border-l-0 md:border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col h-full">
+      <div className="p-4 border-b border-border/50">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search technicians..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-10 rounded-xl bg-muted/30 border-border/50"
+          />
+        </div>
+      </div>
+      <ScrollArea className="flex-1">
+        <div className="p-2 space-y-0.5">
+          {filtered.map((tech) => (
+            <button
+              key={tech.id}
+              onClick={() => onSelect(tech)}
+              className="w-full text-left p-3 rounded-xl hover:bg-muted/50 transition-all duration-200 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                  {tech.name.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">{tech.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {tech.city}, {tech.state}
+                  </p>
+                </div>
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="text-center py-12">
+              <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No technicians found</p>
             </div>
-          </ScrollArea>
-        </>
-      )}
+          )}
+        </div>
+      </ScrollArea>
     </aside>
   );
 }
