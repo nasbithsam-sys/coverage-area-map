@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
@@ -18,11 +18,29 @@ interface CoverageZone {
   color_level: string;
 }
 
+export interface SearchResultItem {
+  tech: Tables<"technicians">;
+  distanceMiles: number;
+  isFallback: boolean;
+}
+
+export interface SearchResultsData {
+  results: SearchResultItem[];
+  resultType: SearchResultType;
+  query: string;
+}
+
+export interface USMapHandle {
+  locateTech: (tech: Tables<"technicians">) => void;
+}
+
 interface USMapProps {
   technicians: Tables<"technicians">[];
   showPins?: boolean;
   showSearch?: boolean;
   onTechClick?: (tech: Tables<"technicians">) => void;
+  onSearchResults?: (data: SearchResultsData | null) => void;
+  filteredTechIds?: Set<string> | null;
 }
 
 const COVERAGE_COLORS: Record<string, string> = {
@@ -36,6 +54,28 @@ function milesToMeters(miles: number) {
 }
 
 type SearchResultType = "address" | "neighborhood" | "zip" | "city" | "state" | "unknown";
+
+const STATE_ABBR_TO_NAME: Record<string, string> = {
+  AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",CO:"Colorado",CT:"Connecticut",
+  DE:"Delaware",FL:"Florida",GA:"Georgia",HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",
+  IA:"Iowa",KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",MA:"Massachusetts",
+  MI:"Michigan",MN:"Minnesota",MS:"Mississippi",MO:"Missouri",MT:"Montana",NE:"Nebraska",
+  NV:"Nevada",NH:"New Hampshire",NJ:"New Jersey",NM:"New Mexico",NY:"New York",NC:"North Carolina",
+  ND:"North Dakota",OH:"Ohio",OK:"Oklahoma",OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",
+  SC:"South Carolina",SD:"South Dakota",TN:"Tennessee",TX:"Texas",UT:"Utah",VT:"Vermont",
+  VA:"Virginia",WA:"Washington",WV:"West Virginia",WI:"Wisconsin",WY:"Wyoming",DC:"District of Columbia",
+};
+const STATE_NAME_TO_ABBR: Record<string, string> = {};
+for (const [abbr, name] of Object.entries(STATE_ABBR_TO_NAME)) {
+  STATE_NAME_TO_ABBR[name.toLowerCase()] = abbr;
+}
+
+function normalizeState(s: string): string {
+  const upper = s.trim().toUpperCase();
+  if (STATE_ABBR_TO_NAME[upper]) return upper;
+  const abbr = STATE_NAME_TO_ABBR[s.trim().toLowerCase()];
+  return abbr || upper;
+}
 
 function detectResultType(result: any): SearchResultType {
   const type = (result.type || "").toLowerCase();
@@ -57,7 +97,6 @@ function detectResultType(result: any): SearchResultType {
   if (type === "house" || type === "building" || cls === "building" || cls === "shop" || cls === "amenity" || cls === "tourism" || cls === "office" || addrType === "road" || addrType === "house_number") {
     return "address";
   }
-  // fallback: if bounding box is very small, likely an address
   if (result.boundingbox) {
     const south = parseFloat(result.boundingbox[0]);
     const north = parseFloat(result.boundingbox[1]);
@@ -65,7 +104,7 @@ function detectResultType(result: any): SearchResultType {
     if (span < 0.01) return "address";
     if (span > 2) return "state";
   }
-  return "city"; // safe default
+  return "city";
 }
 
 function getRadiusForType(resultType: SearchResultType, boundingbox?: string[]): number {
@@ -77,7 +116,6 @@ function getRadiusForType(resultType: SearchResultType, boundingbox?: string[]):
     const latSpan = Math.abs(north - south);
     const lonSpan = Math.abs(east - west);
     const avgSpan = (latSpan + lonSpan) / 2;
-    // Rough conversion: 1 degree ≈ 111km
     const radiusKm = (avgSpan / 2) * 111;
     const radiusM = radiusKm * 1000;
     if (radiusM > 500) return radiusM;
@@ -91,17 +129,114 @@ function getRadiusForType(resultType: SearchResultType, boundingbox?: string[]):
   }
 }
 
-export default function USMap({ technicians, showPins = false, showSearch = false, onTechClick }: USMapProps) {
+function getDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3959;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function filterTechsBySearch(
+  technicians: Tables<"technicians">[],
+  resultType: SearchResultType,
+  searchLat: number,
+  searchLon: number,
+  geocodeResult: any,
+  searchQuery: string
+): { results: SearchResultItem[]; isFallback: boolean } {
+  const allWithDist = technicians.map((t) => ({
+    tech: t,
+    distanceMiles: getDistanceMiles(searchLat, searchLon, t.latitude, t.longitude),
+  }));
+
+  allWithDist.sort((a, b) => {
+    const aNew = a.tech.is_new ? 0 : 1;
+    const bNew = b.tech.is_new ? 0 : 1;
+    if (aNew !== bNew) return aNew - bNew;
+    return a.distanceMiles - b.distanceMiles;
+  });
+
+  const nearest10 = () => allWithDist.slice(0, 10).map((d) => ({ ...d, isFallback: true }));
+
+  if (resultType === "address") {
+    return { results: nearest10(), isFallback: true };
+  }
+
+  if (resultType === "zip") {
+    const searchedZip = (geocodeResult.address?.postcode || searchQuery).trim();
+    const matched = allWithDist.filter((d) => d.tech.zip === searchedZip);
+    if (matched.length > 0) {
+      return { results: matched.map((d) => ({ ...d, isFallback: false })), isFallback: false };
+    }
+    return { results: nearest10(), isFallback: true };
+  }
+
+  if (resultType === "neighborhood" || resultType === "city") {
+    const searchedCity = (
+      geocodeResult.address?.city ||
+      geocodeResult.address?.town ||
+      geocodeResult.address?.village ||
+      geocodeResult.address?.suburb ||
+      searchQuery
+    ).trim().toLowerCase();
+    const matched = allWithDist.filter((d) => d.tech.city.toLowerCase() === searchedCity);
+    if (matched.length > 0) {
+      return { results: matched.map((d) => ({ ...d, isFallback: false })), isFallback: false };
+    }
+    return { results: nearest10(), isFallback: true };
+  }
+
+  if (resultType === "state") {
+    const searchedState = normalizeState(
+      geocodeResult.address?.state || searchQuery
+    );
+    const matched = allWithDist.filter((d) => normalizeState(d.tech.state) === searchedState);
+    if (matched.length > 0) {
+      return { results: matched.map((d) => ({ ...d, isFallback: false })), isFallback: false };
+    }
+    return { results: nearest10(), isFallback: true };
+  }
+
+  return { results: nearest10(), isFallback: true };
+}
+
+const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
+  { technicians, showPins = false, showSearch = false, onTechClick, onSearchResults, filteredTechIds },
+  ref
+) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const zonesRef = useRef<L.LayerGroup | null>(null);
   const radiusRef = useRef<L.LayerGroup | null>(null);
   const searchLayerRef = useRef<L.LayerGroup | null>(null);
+  const highlightRef = useRef<L.LayerGroup | null>(null);
   const [zones, setZones] = useState<CoverageZone[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [hasSearchOverlay, setHasSearchOverlay] = useState(false);
+
+  // Expose locateTech via ref
+  useImperativeHandle(ref, () => ({
+    locateTech: (tech: Tables<"technicians">) => {
+      if (!leafletMap.current) return;
+      leafletMap.current.setView([tech.latitude, tech.longitude], 13, { animate: true });
+      // Pulse highlight
+      if (highlightRef.current) highlightRef.current.clearLayers();
+      const pulse = L.circleMarker([tech.latitude, tech.longitude], {
+        radius: 20,
+        color: "hsl(0, 72%, 51%)",
+        fillColor: "hsl(0, 72%, 51%)",
+        fillOpacity: 0.4,
+        weight: 3,
+      });
+      highlightRef.current?.addLayer(pulse);
+      setTimeout(() => highlightRef.current?.removeLayer(pulse), 1500);
+    },
+  }));
 
   // Fetch coverage zones
   useEffect(() => {
@@ -130,6 +265,7 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
     zonesRef.current = L.layerGroup().addTo(map);
     radiusRef.current = L.layerGroup().addTo(map);
     searchLayerRef.current = L.layerGroup().addTo(map);
+    highlightRef.current = L.layerGroup().addTo(map);
 
     clusterRef.current = L.markerClusterGroup({
       maxClusterRadius: 50,
@@ -177,16 +313,19 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
     });
   }, [zones]);
 
-  // Draw tech markers & service radius
+  // Draw tech markers & service radius — respects filteredTechIds
   useEffect(() => {
     if (!clusterRef.current || !radiusRef.current) return;
     clusterRef.current.clearLayers();
     radiusRef.current.clearLayers();
 
-    const activeTechs = technicians.filter((t) => t.is_active);
+    let techs = technicians.filter((t) => t.is_active);
+    if (filteredTechIds) {
+      techs = techs.filter((t) => filteredTechIds.has(t.id));
+    }
 
     if (showPins) {
-      activeTechs.forEach((tech) => {
+      techs.forEach((tech) => {
         L.circle([tech.latitude, tech.longitude], {
           radius: milesToMeters(tech.service_radius_miles),
           color: "hsl(217, 71%, 45%)",
@@ -196,10 +335,8 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
           interactive: false,
         }).addTo(radiusRef.current!);
       });
-    }
 
-    if (showPins) {
-      activeTechs.forEach((tech) => {
+      techs.forEach((tech) => {
         const marker = L.circleMarker([tech.latitude, tech.longitude], {
           radius: 7,
           fillColor: "hsl(217, 71%, 45%)",
@@ -221,14 +358,15 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
         clusterRef.current!.addLayer(marker);
       });
     }
-  }, [technicians, showPins, onTechClick]);
+  }, [technicians, showPins, onTechClick, filteredTechIds]);
 
-  const priorityOrder = (p: string) => p === "best" ? 0 : p === "last" ? 2 : 1;
-
-  const clearSearchOverlay = () => {
+  const clearSearchOverlay = useCallback(() => {
     searchLayerRef.current?.clearLayers();
+    highlightRef.current?.clearLayers();
     setHasSearchOverlay(false);
-  };
+    setSearchQuery("");
+    onSearchResults?.(null);
+  }, [onSearchResults]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim() || !leafletMap.current) return;
@@ -252,10 +390,10 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
       const resultType = detectResultType(result);
 
       // Clear previous search overlay
-      clearSearchOverlay();
+      searchLayerRef.current?.clearLayers();
+      highlightRef.current?.clearLayers();
 
       if (resultType === "address") {
-        // Drop pin + popup at exact location
         const pin = L.marker([searchLat, searchLon], {
           icon: L.divIcon({
             html: `<div style="width:28px;height:28px;background:hsl(0,72%,51%);border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">
@@ -271,7 +409,6 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
         leafletMap.current.setView([searchLat, searchLon], 16, { animate: true });
 
       } else if (resultType === "state" && result.geojson) {
-        // Draw GeoJSON polygon for state
         try {
           const geoLayer = L.geoJSON(result.geojson, {
             style: {
@@ -285,7 +422,6 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
           searchLayerRef.current?.addLayer(geoLayer);
           leafletMap.current.fitBounds(geoLayer.getBounds(), { padding: [40, 40], animate: true });
         } catch {
-          // Fallback: use bounding box
           if (result.boundingbox) {
             const south = parseFloat(result.boundingbox[0]);
             const north = parseFloat(result.boundingbox[1]);
@@ -306,7 +442,6 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
           }
         }
       } else {
-        // zip / neighborhood / city — draw dashed circle
         const radius = getRadiusForType(resultType, result.boundingbox);
 
         const pin = L.marker([searchLat, searchLon], {
@@ -330,40 +465,30 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
           interactive: false,
         });
         searchLayerRef.current?.addLayer(circle);
-
-        // Fit to circle bounds
         leafletMap.current.fitBounds(circle.getBounds(), { padding: [50, 50], maxZoom: 14, animate: true });
       }
 
       setHasSearchOverlay(true);
 
-      // Tech proximity logic (for processor/admin)
-      if (showPins) {
-        const activeTechs = technicians.filter((t) => t.is_active);
-        const withDist = activeTechs.map((t) => ({
-          tech: t,
-          dist: getDistanceMiles(searchLat, searchLon, t.latitude, t.longitude),
-          priority: t.priority || "normal",
-        }));
+      // Compute filtered technician results and emit to parent
+      const { results: techResults, isFallback } = filterTechsBySearch(
+        technicians,
+        resultType,
+        searchLat,
+        searchLon,
+        result,
+        searchQuery
+      );
 
-        withDist.sort((a, b) => {
-          const aNew = a.tech.is_new ? 0 : 1;
-          const bNew = b.tech.is_new ? 0 : 1;
-          if (aNew !== bNew) return aNew - bNew;
-          const pa = priorityOrder(a.priority);
-          const pb = priorityOrder(b.priority);
-          if (pa !== pb) return pa - pb;
-          return a.dist - b.dist;
-        });
+      onSearchResults?.({
+        results: techResults,
+        resultType,
+        query: searchQuery,
+      });
 
-        let nearest = withDist.filter((d) => d.dist <= d.tech.service_radius_miles);
-        if (nearest.length === 0) {
-          nearest = withDist.slice(0, 10);
-        }
-
-        if (nearest.length > 0 && onTechClick) {
-          onTechClick(nearest[0].tech);
-        }
+      // Also auto-select first tech if showPins
+      if (showPins && techResults.length > 0 && onTechClick) {
+        onTechClick(techResults[0].tech);
       }
     } catch {
       toast.error("Search failed", { description: "Please try again." });
@@ -374,7 +499,6 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
 
   return (
     <div className="relative w-full h-full">
-      {/* Search bar */}
       {showSearch && (
         <div className="absolute top-3 left-3 z-[1000] flex gap-2 items-center">
           <input
@@ -407,10 +531,8 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
         </div>
       )}
 
-      {/* Map container */}
       <div ref={mapRef} className="w-full h-full rounded-lg" style={{ minHeight: "500px" }} />
 
-      {/* Legend */}
       <div className="absolute bottom-3 right-3 z-[1000] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs space-y-1.5">
         <p className="font-semibold text-foreground mb-1">Coverage Zones</p>
         <div className="flex items-center gap-1.5">
@@ -428,15 +550,6 @@ export default function USMap({ technicians, showPins = false, showSearch = fals
       </div>
     </div>
   );
-}
+});
 
-// Haversine distance in miles
-function getDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 3959;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+export default USMap;
