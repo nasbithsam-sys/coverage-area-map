@@ -7,6 +7,25 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// In-memory rate limiter: max 5 attempts per user per 5 minutes
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+const attemptMap = new Map<string, { count: number; firstAttempt: number }>();
+
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const entry = attemptMap.get(userId);
+  if (!entry || now - entry.firstAttempt > RATE_LIMIT_WINDOW_MS) {
+    attemptMap.set(userId, { count: 1, firstAttempt: now });
+    return false;
+  }
+  entry.count++;
+  if (entry.count > MAX_ATTEMPTS) {
+    return true;
+  }
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -95,6 +114,14 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Rate limit: max 5 attempts per user per 5 minutes
+      if (isRateLimited(user_id)) {
+        return new Response(
+          JSON.stringify({ error: "Too many attempts. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("totp_secret, email")
@@ -130,8 +157,8 @@ Deno.serve(async (req) => {
       JSON.stringify({ error: "Invalid action. Use 'generate' or 'verify'" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (_e) {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
