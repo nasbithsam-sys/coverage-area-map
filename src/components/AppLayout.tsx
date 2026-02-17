@@ -8,8 +8,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useState } from "react";
 
 const navItems = [
-{ path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "csr", "admin"] as const },
-{ path: "/technicians", label: "Technicians", icon: Users, roles: ["csr", "admin"] as const },
+{ path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "processor", "admin"] as const },
+{ path: "/technicians", label: "Technicians", icon: Users, roles: ["processor", "admin"] as const },
 { path: "/admin", label: "Admin", icon: Shield, roles: ["admin"] as const }];
 
 

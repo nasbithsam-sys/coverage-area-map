@@ -139,7 +139,7 @@ export default function USMap({ technicians, showPins = false, onTechClick }: US
       }).addTo(radiusRef.current!);
     });
 
-    // Pins (CSR/Admin only)
+    // Pins (Processor/Admin only)
     if (showPins) {
       activeTechs.forEach((tech) => {
         const marker = L.circleMarker([tech.latitude, tech.longitude], {
