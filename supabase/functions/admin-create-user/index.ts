@@ -86,7 +86,9 @@ Deno.serve(async (req) => {
       .insert({ user_id: newUser.user.id, role });
 
     // Generate OTP for the new user profile
-    const otp = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const otp = String(arr[0] % 1000000).padStart(6, "0");
     await supabaseAdmin
       .from("profiles")
       .update({ otp_code: otp })
@@ -96,8 +98,8 @@ Deno.serve(async (req) => {
       JSON.stringify({ user_id: newUser.user.id, otp_code: otp }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (_e) {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

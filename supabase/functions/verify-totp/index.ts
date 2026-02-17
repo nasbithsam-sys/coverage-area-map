@@ -107,6 +107,27 @@ Deno.serve(async (req) => {
 
     // Action: verify - verify a TOTP code
     if (action === "verify") {
+      // Require authentication - caller must be the user being verified
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const supabaseUser = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: userData } = await supabaseUser.auth.getUser();
+      if (!userData?.user || userData.user.id !== user_id) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       if (!user_id || !totp_code) {
         return new Response(
           JSON.stringify({ error: "user_id and totp_code required" }),
