@@ -26,7 +26,7 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/technicians" element={<ProtectedRoute allowedRoles={["csr", "admin"]}><Technicians /></ProtectedRoute>} />
+              <Route path="/technicians" element={<ProtectedRoute allowedRoles={["processor", "admin"]}><Technicians /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><Admin /></ProtectedRoute>} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<NotFound />} />

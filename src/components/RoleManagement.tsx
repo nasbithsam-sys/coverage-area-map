@@ -34,7 +34,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newFullName, setNewFullName] = useState("");
-  const [newRole, setNewRole] = useState<AppRole>("csr");
+  const [newRole, setNewRole] = useState<AppRole>("processor");
   const [creating, setCreating] = useState(false);
   const [totpDialog, setTotpDialog] = useState<{ open: boolean; uri: string; secret: string } | null>(null);
 
@@ -230,7 +230,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="csr">CSR</SelectItem>
+                  <SelectItem value="processor">Processor</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -323,7 +323,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
                           <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="marketing">Marketing</SelectItem>
-                            <SelectItem value="csr">CSR</SelectItem>
+                            <SelectItem value="processor">Processor</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>

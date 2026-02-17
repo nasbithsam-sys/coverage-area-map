@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   const activeTechs = technicians.filter((t) => t.is_active);
   const states = new Set(activeTechs.map((t) => t.state));
-  const showPins = role === "csr" || role === "admin";
+  const showPins = role === "processor" || role === "admin";
 
   const stats = [
     { label: "Total Techs", value: activeTechs.length, icon: Users, color: "text-primary" },
