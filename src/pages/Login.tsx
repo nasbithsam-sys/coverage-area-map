@@ -29,6 +29,8 @@ export default function Login() {
       return;
     }
 
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
     const userId = (await supabase.auth.getUser()).data.user!.id;
 
     // Check if admin → use TOTP, otherwise rotating OTP
@@ -43,7 +45,10 @@ export default function Login() {
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-totp`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify({ user_id: userId, totp_code: otp, action: "verify" }),
         }
       );

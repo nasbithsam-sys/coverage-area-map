@@ -146,7 +146,9 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
   };
 
   const regenerateOtp = async (userId: string) => {
-    const newOtp = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const newOtp = String(arr[0] % 1000000).padStart(6, "0");
     const { error } = await supabase
       .from("profiles")
       .update({ otp_code: newOtp })
