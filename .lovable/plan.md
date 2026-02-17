@@ -1,59 +1,91 @@
 
-# Tech Coverage Map Dashboard
 
-## Overview
-A US map dashboard for your home repair services company with **three role-based views** (Admin, Marketing, CSR), powered by Supabase for authentication, user roles, and technician data management.
+## Enhance Coverage Map Search with Sidebar Filtering
 
-## Roles & Access
+### Overview
+Wire the map search results into the sidebar so that every search (zip, city, state, address) filters technicians and displays them in a scrollable list with distance, expandable details, and map interaction.
 
-### Marketing
-- View-only access to coverage map (density, regions, radius circles)
-- No individual tech details visible
+### Architecture Changes
 
-### CSR (Customer Service Representative)
-- View coverage map + individual tech pins with details
-- Add, edit, deactivate technicians
+**1. Lift search state out of USMap into Dashboard**
 
-### Admin
-- Full access to both Marketing and CSR views
-- **Analytics dashboard** — track activity like techs added, edits made, coverage trends
-- **Activity log** — see who (which CSR) added or edited technician details, with timestamps
-- **Role management** — assign Marketing or CSR roles to users, invite new users
+Currently `USMap` owns the search input, geocoding, and result filtering internally. To share search results with the sidebar, we need to lift the search result data up to `Dashboard.tsx`.
 
-## Features
+- Add a new callback prop to `USMap`: `onSearchResults` that passes up an array of `{ tech, distanceMiles, isFallback }` plus the result type and geocoded coordinates.
+- `USMap` will continue to own the map visuals (overlays, pins, circles, polygons) but will emit filtered technician results to the parent.
+- `Dashboard` will store `searchResults` state and pass it to `TechSidebar`.
 
-### 1. Authentication & Login
-- Email/password login page
-- Role-based redirect after login (Admin → Admin Dashboard, Marketing → Marketing Map, CSR → CSR Map)
-- Role stored securely in a separate `user_roles` table with RLS
+**2. Technician filtering logic inside USMap's handleSearch**
 
-### 2. US Map — Marketing View
-- Interactive US map showing coverage strength
-- **Color-coded states/regions** — green for strong coverage, yellow moderate, red weak
-- **Circle overlays** showing coverage radius around tech clusters
-- Summary stats: total techs, states covered, strongest/weakest areas
-- No individual tech info visible
+After geocoding, compute results based on result type:
 
-### 3. US Map — CSR View
-- Same coverage visualization as Marketing
-- **Clickable pins** for individual technicians
-- Click a pin → see tech name, phone, specialty, availability, service area
-- Sidebar with searchable/filterable technician list
-- Forms to add, edit, and deactivate technicians
+| Result Type | Primary Match | Fallback |
+|---|---|---|
+| ZIP | `tech.zip === searchedZip` (exact) | Nearest 10 by Haversine |
+| Neighborhood / City | `tech.city` case-insensitive match | Nearest 10 by Haversine |
+| State | `tech.state` matches (full name or abbreviation) | Nearest 10 by Haversine |
+| Address / POI | N/A (always distance) | Nearest 10 by Haversine |
 
-### 4. Technician Management (CSR + Admin)
-- Add technician form: name, phone, email, specialty/skills, city/state, zip, service radius
-- Edit and deactivate existing technicians
-- All changes are logged with who made the change and when
+All results include computed `distanceMiles` from the geocoded center. A `isFallback` boolean flag indicates if the fallback path was used (to show the "No exact matches, showing nearest" message).
 
-### 5. Admin Dashboard
-- **Activity Log** — table showing recent actions: "John (CSR) added Tech 'Mike Smith' on Feb 14", "Jane (CSR) edited Tech 'Sarah Lee' location on Feb 13"
-- **Analytics** — charts showing techs added over time, coverage growth, active vs inactive techs, techs per state
-- **Role Management** — list all users, assign/change roles (Marketing, CSR, Admin), invite new users by email
+**3. Update map markers to show only filtered techs during search**
 
-### 6. Backend (Supabase via Lovable Cloud)
-- **Auth** with email/password
-- **user_roles table** — stores role per user (admin, marketing, csr)
-- **technicians table** — all tech data and coordinates
-- **activity_log table** — tracks every add/edit/delete with user ID, action type, timestamp, and details
-- **RLS policies** — Marketing: read-only coverage data; CSR: read/write techs; Admin: full access + role management
+When search results are active, the cluster layer will only render markers for the filtered technicians (not all techs). When search is cleared, restore all tech markers.
+
+- Add a `filteredTechIds` state derived from search results.
+- In the marker-drawing `useEffect`, if `filteredTechIds` is set, only render those techs.
+
+**4. Redesign TechSidebar to support search results mode**
+
+The sidebar will operate in three modes:
+- **Default**: Shows the existing searchable tech list (current behavior).
+- **Search Results**: Shows filtered techs from the map search, with distance and expand/collapse details.
+- **Selected Tech**: Shows full details for a single technician (current behavior).
+
+New props for TechSidebar:
+```
+searchResults: { tech, distanceMiles, isFallback }[] | null
+searchResultType: string | null
+onLocateTech: (tech) => void   // pan map to tech
+onClearSearch: () => void
+```
+
+**Search Results UI**:
+- Header: "Search Results" with result count and a "Clear" button.
+- If fallback: info banner "No exact matches found. Showing nearest technicians."
+- Each item shows: name, city/state/zip, active/inactive badge, distance in miles.
+- A "Show" button on each item expands an accordion panel inline with full details (phone, email, radius, specialties, notes).
+- A "Locate" icon button pans/zooms the map to that tech's marker and briefly highlights it.
+
+**5. Map highlight on "Locate" click**
+
+Add a new prop/callback `onLocateTech` from Dashboard to USMap. When called with a tech:
+- Pan/zoom map to tech's coordinates (zoom 13).
+- Briefly flash the tech's marker (pulse animation via temporary circle overlay that fades out after 1.5s).
+
+**6. Clear search flow**
+
+When the user clicks "Clear" (on map or sidebar):
+- Remove map overlays (existing behavior).
+- Clear `searchResults` state in Dashboard.
+- Restore full tech marker set on map.
+- Sidebar returns to default mode.
+
+### Files to Modify
+
+| File | Changes |
+|---|---|
+| `src/components/USMap.tsx` | Add `onSearchResults` callback prop; extract filtered tech logic from `handleSearch`; add `filteredTechIds` prop to control which markers render; add `locateTech` method via ref or prop; add `onClearSearch` callback. |
+| `src/components/TechSidebar.tsx` | Add search results mode with accordion details, distance display, locate button, fallback banner, and clear button. Add new props. |
+| `src/pages/Dashboard.tsx` | Hold `searchResults` state; wire `onSearchResults` from USMap to TechSidebar; handle `onLocateTech` and `onClearSearch`; show sidebar for all roles when search results are active. |
+
+### Technical Details
+
+**State abbreviation matching**: Use a US state name-to-abbreviation lookup map so searching "Texas" matches techs with `state: "TX"` and vice versa.
+
+**Accordion for tech details**: Use the existing `@radix-ui/react-accordion` (already installed) for the expand/collapse detail panels in the sidebar.
+
+**Marker highlight effect**: Create a temporary `L.circleMarker` with a larger radius and opacity animation at the tech's coordinates, remove it after 1.5 seconds using `setTimeout`.
+
+**Performance**: Only filtered techs (typically 10-50) get rendered as markers during search, so clustering is not a concern. The Haversine computation over thousands of techs is O(n) and fast in JS.
+
