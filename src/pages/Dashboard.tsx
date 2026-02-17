@@ -86,6 +86,7 @@ export default function Dashboard() {
                   <USMap
                     technicians={technicians}
                     showPins={showPins}
+                    showSearch={true}
                     onTechClick={showPins ? handleTechSelect : undefined}
                   />
                 </div>

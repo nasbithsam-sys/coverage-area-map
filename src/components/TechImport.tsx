@@ -9,11 +9,12 @@ import type { Tables } from "@/integrations/supabase/types";
 interface Props {
   onImported: () => void;
   technicians: Tables<"technicians">[];
+  role?: string;
 }
 
 const CSV_HEADERS = ["name", "phone", "email", "city", "state", "zip", "latitude", "longitude", "service_radius_miles", "specialty", "priority", "notes"];
 
-export default function TechImport({ onImported, technicians }: Props) {
+export default function TechImport({ onImported, technicians, role }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [importing, setImporting] = useState(false);
@@ -124,10 +125,12 @@ export default function TechImport({ onImported, technicians }: Props) {
         <Upload className="h-4 w-4 mr-1.5" />
         {importing ? "Importing..." : "Import"}
       </Button>
-      <Button variant="outline" size="sm" onClick={exportCSV}>
-        <Download className="h-4 w-4 mr-1.5" />
-        Export
-      </Button>
+      {role === "admin" && (
+        <Button variant="outline" size="sm" onClick={exportCSV}>
+          <Download className="h-4 w-4 mr-1.5" />
+          Export
+        </Button>
+      )}
     </div>
   );
 }
