@@ -7,6 +7,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
+import { Layers } from "lucide-react";
 
 interface CoverageZone {
   id: string;
@@ -203,12 +204,31 @@ function filterTechsBySearch(
   return { results: nearest10(), isFallback: true };
 }
 
+// --- Tile layer definitions ---
+const TILE_LAYERS = {
+  street: {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+    label: "Street",
+  },
+  satellite: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+    maxZoom: 19,
+    label: "Satellite",
+  },
+};
+
+type TileLayerKey = keyof typeof TILE_LAYERS;
+
 const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
   { technicians, showPins = false, showSearch = false, onTechClick, onSearchResults, filteredTechIds },
   ref
 ) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const zonesRef = useRef<L.LayerGroup | null>(null);
   const radiusRef = useRef<L.LayerGroup | null>(null);
@@ -218,13 +238,14 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [hasSearchOverlay, setHasSearchOverlay] = useState(false);
+  const [activeLayer, setActiveLayer] = useState<TileLayerKey>("street");
+  const [layerMenuOpen, setLayerMenuOpen] = useState(false);
 
   // Expose locateTech via ref
   useImperativeHandle(ref, () => ({
     locateTech: (tech: Tables<"technicians">) => {
       if (!leafletMap.current) return;
       leafletMap.current.setView([tech.latitude, tech.longitude], 13, { animate: true });
-      // Pulse highlight
       if (highlightRef.current) highlightRef.current.clearLayers();
       const pulse = L.circleMarker([tech.latitude, tech.longitude], {
         radius: 20,
@@ -253,14 +274,15 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       center: [39.8283, -98.5795],
       zoom: 5,
       minZoom: 4,
-      maxZoom: 18,
+      maxZoom: 19,
       zoomControl: true,
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
+    const initialTile = L.tileLayer(TILE_LAYERS.street.url, {
+      attribution: TILE_LAYERS.street.attribution,
+      maxZoom: TILE_LAYERS.street.maxZoom,
     }).addTo(map);
+    tileLayerRef.current = initialTile;
 
     zonesRef.current = L.layerGroup().addTo(map);
     radiusRef.current = L.layerGroup().addTo(map);
@@ -294,6 +316,15 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       leafletMap.current = null;
     };
   }, []);
+
+  // Switch tile layer
+  useEffect(() => {
+    if (!leafletMap.current || !tileLayerRef.current) return;
+    const cfg = TILE_LAYERS[activeLayer];
+    tileLayerRef.current.setUrl(cfg.url);
+    tileLayerRef.current.options.attribution = cfg.attribution;
+    tileLayerRef.current.options.maxZoom = cfg.maxZoom;
+  }, [activeLayer]);
 
   // Draw coverage zones
   useEffect(() => {
@@ -394,6 +425,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       highlightRef.current?.clearLayers();
 
       if (resultType === "address") {
+        // PLACE: pin + popup + street zoom
         const pin = L.marker([searchLat, searchLon], {
           icon: L.divIcon({
             html: `<div style="width:28px;height:28px;background:hsl(0,72%,51%);border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">
@@ -408,70 +440,54 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
         searchLayerRef.current?.addLayer(pin);
         leafletMap.current.setView([searchLat, searchLon], 16, { animate: true });
 
-      } else if (resultType === "state" && result.geojson) {
-        try {
-          const geoLayer = L.geoJSON(result.geojson, {
-            style: {
-              color: "hsl(0, 72%, 51%)",
-              fillColor: "hsl(0, 72%, 51%)",
-              fillOpacity: 0.08,
-              weight: 2.5,
-              dashArray: "10 6",
-            },
-          });
-          searchLayerRef.current?.addLayer(geoLayer);
-          leafletMap.current.fitBounds(geoLayer.getBounds(), { padding: [40, 40], animate: true });
-        } catch {
-          if (result.boundingbox) {
-            const south = parseFloat(result.boundingbox[0]);
-            const north = parseFloat(result.boundingbox[1]);
-            const west = parseFloat(result.boundingbox[2]);
-            const east = parseFloat(result.boundingbox[3]);
-            leafletMap.current.fitBounds([[south, west], [north, east]], { padding: [40, 40], animate: true });
-            const radius = getRadiusForType("state", result.boundingbox);
-            const circle = L.circle([searchLat, searchLon], {
-              radius,
-              color: "hsl(0, 72%, 51%)",
-              fillColor: "hsl(0, 72%, 51%)",
-              fillOpacity: 0.06,
-              weight: 2,
-              dashArray: "10 6",
-              interactive: false,
+      } else if (resultType === "state") {
+        // AREA (state): prefer GeoJSON polygon → bbox rectangle → dashed circle
+        if (result.geojson) {
+          try {
+            const geoLayer = L.geoJSON(result.geojson, {
+              style: {
+                color: "hsl(0, 72%, 51%)",
+                fillColor: "hsl(0, 72%, 51%)",
+                fillOpacity: 0.08,
+                weight: 2.5,
+                dashArray: "10 6",
+              },
             });
-            searchLayerRef.current?.addLayer(circle);
+            searchLayerRef.current?.addLayer(geoLayer);
+            leafletMap.current.fitBounds(geoLayer.getBounds(), { padding: [40, 40], animate: true });
+          } catch {
+            drawBboxOrCircleFallback(result, searchLat, searchLon, "state");
           }
+        } else {
+          drawBboxOrCircleFallback(result, searchLat, searchLon, "state");
         }
       } else {
-        const radius = getRadiusForType(resultType, result.boundingbox);
-
-        const pin = L.marker([searchLat, searchLon], {
-          icon: L.divIcon({
-            html: `<div style="width:22px;height:22px;background:hsl(0,72%,51%);border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
-            className: "",
-            iconSize: L.point(22, 22),
-            iconAnchor: L.point(11, 11),
-          }),
-        });
-        pin.bindTooltip(result.display_name || searchQuery, { direction: "top" });
-        searchLayerRef.current?.addLayer(pin);
-
-        const circle = L.circle([searchLat, searchLon], {
-          radius: Math.max(radius, 1000),
-          color: "hsl(0, 72%, 51%)",
-          fillColor: "hsl(0, 72%, 51%)",
-          fillOpacity: 0.06,
-          weight: 2,
-          dashArray: "8 6",
-          interactive: false,
-        });
-        searchLayerRef.current?.addLayer(circle);
-        leafletMap.current.fitBounds(circle.getBounds(), { padding: [50, 50], maxZoom: 14, animate: true });
+        // AREA (zip / city / neighborhood): prefer GeoJSON polygon → bbox rectangle → dashed circle
+        if (result.geojson && result.geojson.type !== "Point") {
+          try {
+            const geoLayer = L.geoJSON(result.geojson, {
+              style: {
+                color: "hsl(0, 72%, 51%)",
+                fillColor: "hsl(0, 72%, 51%)",
+                fillOpacity: 0.06,
+                weight: 2,
+                dashArray: "8 6",
+              },
+            });
+            searchLayerRef.current?.addLayer(geoLayer);
+            leafletMap.current.fitBounds(geoLayer.getBounds(), { padding: [50, 50], maxZoom: 14, animate: true });
+          } catch {
+            drawBboxOrCircleFallback(result, searchLat, searchLon, resultType);
+          }
+        } else {
+          drawBboxOrCircleFallback(result, searchLat, searchLon, resultType);
+        }
       }
 
       setHasSearchOverlay(true);
 
       // Compute filtered technician results and emit to parent
-      const { results: techResults, isFallback } = filterTechsBySearch(
+      const { results: techResults } = filterTechsBySearch(
         technicians,
         resultType,
         searchLat,
@@ -486,7 +502,6 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
         query: searchQuery,
       });
 
-      // Also auto-select first tech if showPins
       if (showPins && techResults.length > 0 && onTechClick) {
         onTechClick(techResults[0].tech);
       }
@@ -496,6 +511,56 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       setSearching(false);
     }
   };
+
+  /** Fallback: try bounding box rectangle, else dashed circle */
+  function drawBboxOrCircleFallback(result: any, lat: number, lon: number, rType: SearchResultType) {
+    if (!leafletMap.current || !searchLayerRef.current) return;
+
+    // Add a small center pin for non-address area searches
+    const pin = L.marker([lat, lon], {
+      icon: L.divIcon({
+        html: `<div style="width:22px;height:22px;background:hsl(0,72%,51%);border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
+        className: "",
+        iconSize: L.point(22, 22),
+        iconAnchor: L.point(11, 11),
+      }),
+    });
+    pin.bindTooltip(result.display_name || "", { direction: "top" });
+    searchLayerRef.current.addLayer(pin);
+
+    if (result.boundingbox) {
+      const south = parseFloat(result.boundingbox[0]);
+      const north = parseFloat(result.boundingbox[1]);
+      const west = parseFloat(result.boundingbox[2]);
+      const east = parseFloat(result.boundingbox[3]);
+      const bounds: L.LatLngBoundsExpression = [[south, west], [north, east]];
+
+      const rect = L.rectangle(bounds, {
+        color: "hsl(0, 72%, 51%)",
+        fillColor: "hsl(0, 72%, 51%)",
+        fillOpacity: 0.06,
+        weight: 2,
+        dashArray: "8 6",
+        interactive: false,
+      });
+      searchLayerRef.current.addLayer(rect);
+      leafletMap.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14, animate: true });
+    } else {
+      // Last fallback: dashed circle
+      const radius = getRadiusForType(rType);
+      const circle = L.circle([lat, lon], {
+        radius: Math.max(radius, 1000),
+        color: "hsl(0, 72%, 51%)",
+        fillColor: "hsl(0, 72%, 51%)",
+        fillOpacity: 0.06,
+        weight: 2,
+        dashArray: "8 6",
+        interactive: false,
+      });
+      searchLayerRef.current.addLayer(circle);
+      leafletMap.current.fitBounds(circle.getBounds(), { padding: [50, 50], maxZoom: 14, animate: true });
+    }
+  }
 
   return (
     <div className="relative w-full h-full">
@@ -531,9 +596,39 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
         </div>
       )}
 
+      {/* Base map layer switcher */}
+      <div className="absolute top-3 right-3 z-[1000]">
+        <div className="relative">
+          <button
+            onClick={() => setLayerMenuOpen(!layerMenuOpen)}
+            className="h-10 w-10 rounded-md bg-card text-foreground shadow-md border border-input hover:bg-muted transition-colors flex items-center justify-center"
+            title="Change map style"
+          >
+            <Layers className="h-4 w-4" />
+          </button>
+          {layerMenuOpen && (
+            <div className="absolute top-12 right-0 bg-card border border-border rounded-lg shadow-xl p-1.5 space-y-0.5 min-w-[140px]">
+              {(Object.keys(TILE_LAYERS) as TileLayerKey[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => { setActiveLayer(key); setLayerMenuOpen(false); }}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    activeLayer === key
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted text-foreground"
+                  }`}
+                >
+                  {TILE_LAYERS[key].label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div ref={mapRef} className="w-full h-full rounded-lg" style={{ minHeight: "500px" }} />
 
-      <div className="absolute bottom-3 right-3 z-[1000] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs space-y-1.5">
+      <div className="absolute bottom-3 left-3 z-[1000] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs space-y-1.5">
         <p className="font-semibold text-foreground mb-1">Coverage Zones</p>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.strong }} />
