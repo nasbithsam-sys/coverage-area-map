@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
@@ -7,10 +7,11 @@ import TechImport from "@/components/TechImport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, Pencil, Power, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Power, Trash2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -33,6 +34,9 @@ export default function Technicians() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTech, setEditingTech] = useState<Tables<"technicians"> | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [specialtyFilter, setSpecialtyFilter] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const fetchTechs = async () => {
     const { data } = await supabase.from("technicians").select("*").order("name");
@@ -65,6 +69,23 @@ export default function Technicians() {
     }
   };
 
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    const { error } = await supabase.from("technicians").delete().in("id", ids);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      for (const id of ids) {
+        const tech = technicians.find((t) => t.id === id);
+        if (tech) await logActivity("deleted", "technician", tech.id, { name: tech.name });
+      }
+      toast({ title: `${ids.length} technician(s) removed` });
+      setSelectedIds(new Set());
+      fetchTechs();
+    }
+    setBulkDeleteOpen(false);
+  };
+
   const logActivity = async (action: string, entity: string, entityId: string, details: Record<string, unknown>) => {
     if (!user || role === "admin") return;
     await supabase.from("activity_log").insert([{
@@ -82,12 +103,52 @@ export default function Technicians() {
     fetchTechs();
   };
 
-  const filtered = technicians.filter(
-    (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.city.toLowerCase().includes(search.toLowerCase()) ||
-      t.state.toLowerCase().includes(search.toLowerCase())
-  );
+  // Unique specialties for filter
+  const allSpecialties = useMemo(() => {
+    const set = new Set<string>();
+    technicians.forEach((t) => t.specialty?.forEach((s) => set.add(s)));
+    return Array.from(set).sort();
+  }, [technicians]);
+
+  const toggleSpecialty = (s: string) => {
+    setSpecialtyFilter((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+    );
+  };
+
+  const filtered = technicians.filter((t) => {
+    const q = search.toLowerCase();
+    const matchesSearch =
+      !q ||
+      t.name.toLowerCase().includes(q) ||
+      t.city.toLowerCase().includes(q) ||
+      t.state.toLowerCase().includes(q) ||
+      t.zip.toLowerCase().includes(q);
+    const matchesSpecialty =
+      specialtyFilter.length === 0 ||
+      t.specialty?.some((s) => specialtyFilter.includes(s));
+    return matchesSearch && matchesSpecialty;
+  });
+
+  // Selection helpers
+  const allFilteredSelected = filtered.length > 0 && filtered.every((t) => selectedIds.has(t.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((t) => t.id)));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <AppLayout>
@@ -119,15 +180,81 @@ export default function Technicians() {
           </div>
         </div>
 
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        {/* Search + Specialty Filter */}
+        <div className="space-y-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, city, state, ZIP..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {allSpecialties.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-xs text-muted-foreground font-medium mr-1">Specialties:</span>
+              {allSpecialties.map((s) => (
+                <Badge
+                  key={s}
+                  variant={specialtyFilter.includes(s) ? "default" : "outline"}
+                  className="cursor-pointer text-xs select-none"
+                  onClick={() => toggleSpecialty(s)}
+                >
+                  {s}
+                </Badge>
+              ))}
+              {specialtyFilter.length > 0 && (
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSpecialtyFilter([])}>
+                  <X className="h-3 w-3 mr-1" /> Clear
+                </Button>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Bulk action bar */}
+        {someSelected && (
+          <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/50 animate-fade-in">
+            <span className="text-sm font-medium">{selectedIds.size} selected</span>
+            <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="h-4 w-4 mr-1" /> Delete Selected
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {selectedIds.size} technician(s)?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently remove the selected technicians. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={bulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Delete All
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Clear selection
+            </Button>
+          </div>
+        )}
 
         <div className="rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allFilteredSelected}
+                    onCheckedChange={toggleAll}
+                    aria-label="Select all"
+                  />
+                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Specialties</TableHead>
@@ -139,10 +266,17 @@ export default function Technicians() {
             </TableHeader>
             <TableBody>
               {filtered.map((tech) => (
-                <TableRow key={tech.id}>
+                <TableRow key={tech.id} data-state={selectedIds.has(tech.id) ? "selected" : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(tech.id)}
+                      onCheckedChange={() => toggleOne(tech.id)}
+                      aria-label={`Select ${tech.name}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">
                     {tech.name}
-                    {(tech as any).is_new && (
+                    {tech.is_new && (
                       <Badge variant="default" className="ml-2 text-xs bg-green-600 hover:bg-green-700">NEW</Badge>
                     )}
                   </TableCell>
@@ -156,8 +290,8 @@ export default function Technicians() {
                   </TableCell>
                   <TableCell>{tech.service_radius_miles} mi</TableCell>
                   <TableCell>
-                    <Badge variant={(PRIORITY_COLORS[(tech as any).priority] || "secondary") as any}>
-                      {PRIORITY_LABELS[(tech as any).priority] || "Normal"}
+                    <Badge variant={(PRIORITY_COLORS[tech.priority] || "secondary") as any}>
+                      {PRIORITY_LABELS[tech.priority] || "Normal"}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -204,7 +338,7 @@ export default function Technicians() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No technicians found
                   </TableCell>
                 </TableRow>
