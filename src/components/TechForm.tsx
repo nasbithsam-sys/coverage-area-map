@@ -34,6 +34,30 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "fort worth,tx": { lat: 32.7555, lng: -97.3308 },
   "san antonio,tx": { lat: 29.4241, lng: -98.4936 },
   "austin,tx": { lat: 30.2672, lng: -97.7431 },
+  "arlington,tx": { lat: 32.7357, lng: -97.1081 },
+  "san diego,ca": { lat: 32.7157, lng: -117.1611 },
+  "jacksonville,fl": { lat: 30.3322, lng: -81.6557 },
+  "indianapolis,in": { lat: 39.7684, lng: -86.1581 },
+  "san jose,ca": { lat: 37.3382, lng: -121.8863 },
+  "philadelphia,pa": { lat: 39.9526, lng: -75.1652 },
+  "washington,dc": { lat: 38.9072, lng: -77.0369 },
+  "baltimore,md": { lat: 39.2904, lng: -76.6122 },
+  "tampa,fl": { lat: 27.9506, lng: -82.4572 },
+  "orlando,fl": { lat: 28.5383, lng: -81.3792 },
+  "st. louis,mo": { lat: 38.627, lng: -90.1994 },
+  "pittsburgh,pa": { lat: 40.4406, lng: -79.9959 },
+  "sacramento,ca": { lat: 38.5816, lng: -121.4944 },
+  "raleigh,nc": { lat: 35.7796, lng: -78.6382 },
+  "memphis,tn": { lat: 35.1495, lng: -90.049 },
+  "oklahoma city,ok": { lat: 35.4676, lng: -97.5164 },
+  "louisville,ky": { lat: 38.2527, lng: -85.7585 },
+  "milwaukee,wi": { lat: 43.0389, lng: -87.9065 },
+  "tucson,az": { lat: 32.2226, lng: -110.9747 },
+  "albuquerque,nm": { lat: 35.0844, lng: -106.6504 },
+  "salt lake city,ut": { lat: 40.7608, lng: -111.891 },
+  "omaha,ne": { lat: 41.2565, lng: -95.9345 },
+  "el paso,tx": { lat: 31.7619, lng: -106.485 },
+  "waco,tx": { lat: 31.5493, lng: -97.1467 },
 };
 
 function guessCoords(city: string, state: string) {
@@ -60,22 +84,22 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
 
     const city = form.get("city") as string;
     const state = form.get("state") as string;
-    const latInput = form.get("latitude") as string;
-    const lngInput = form.get("longitude") as string;
 
-    let latitude = latInput ? parseFloat(latInput) : 0;
-    let longitude = lngInput ? parseFloat(lngInput) : 0;
+    let latitude: number;
+    let longitude: number;
 
-    if (!latitude && !longitude) {
-      const coords = guessCoords(city, state);
-      if (coords) {
-        latitude = coords.lat;
-        longitude = coords.lng;
-      } else {
-        toast({ title: "Please enter coordinates", description: "We couldn't auto-detect the location.", variant: "destructive" });
-        setLoading(false);
-        return;
-      }
+    const coords = guessCoords(city, state);
+    if (coords) {
+      latitude = coords.lat;
+      longitude = coords.lng;
+    } else if (tech?.latitude && tech?.longitude) {
+      // Keep existing coordinates when editing
+      latitude = tech.latitude;
+      longitude = tech.longitude;
+    } else {
+      // For new techs with unknown city, default to 0,0 (will not show on map)
+      latitude = 0;
+      longitude = 0;
     }
 
     const specialtyRaw = form.get("specialty") as string;
@@ -151,16 +175,6 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
         <div className="space-y-2">
           <Label htmlFor="zip">ZIP *</Label>
           <Input id="zip" name="zip" required defaultValue={tech?.zip} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="latitude">Latitude</Label>
-          <Input id="latitude" name="latitude" type="number" step="any" placeholder="Auto-detect" defaultValue={tech?.latitude || ""} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="longitude">Longitude</Label>
-          <Input id="longitude" name="longitude" type="number" step="any" placeholder="Auto-detect" defaultValue={tech?.longitude || ""} />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4">

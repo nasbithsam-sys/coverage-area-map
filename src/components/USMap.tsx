@@ -128,7 +128,9 @@ function filterTechsBySearch(
   geocodeResult: any,
   searchQuery: string
 ): { results: SearchResultItem[]; isFallback: boolean } {
-  const allWithDist = technicians.map((t) => ({
+  // Filter out techs with invalid (0,0) coordinates before distance calculation
+  const validTechs = technicians.filter((t) => t.latitude !== 0 || t.longitude !== 0);
+  const allWithDist = validTechs.map((t) => ({
     tech: t,
     distanceMiles: getDistanceMiles(searchLat, searchLon, t.latitude, t.longitude),
   }));
@@ -340,7 +342,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     clusterRef.current.clearLayers();
     radiusRef.current.clearLayers();
 
-    let techs = technicians.filter((t) => t.is_active);
+    let techs = technicians.filter((t) => t.is_active && (t.latitude !== 0 || t.longitude !== 0));
     if (filteredTechIds) {
       techs = techs.filter((t) => filteredTechIds.has(t.id));
     }
