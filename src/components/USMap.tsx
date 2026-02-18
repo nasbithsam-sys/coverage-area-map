@@ -33,6 +33,7 @@ export interface SearchResultsData {
 
 export interface USMapHandle {
   locateTech: (tech: Tables<"technicians">) => void;
+  invalidateSize: () => void;
 }
 
 interface USMapProps {
@@ -237,6 +238,9 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       });
       highlightRef.current?.addLayer(pulse);
       setTimeout(() => highlightRef.current?.removeLayer(pulse), 1500);
+    },
+    invalidateSize: () => {
+      setTimeout(() => leafletMap.current?.invalidateSize(), 50);
     },
   }));
 
