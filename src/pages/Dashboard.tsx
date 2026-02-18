@@ -143,21 +143,29 @@ export default function Dashboard() {
         </div>
 
         {/* Tech sidebar */}
-        {showSidebar && !isMobile && (
-          <TechSidebar
-            technicians={technicians}
-            selectedTech={selectedTech}
-            onSelect={handleTechSelect}
-            onClose={() => setSelectedTech(null)}
-            searchResults={searchData?.results}
-            searchResultType={searchData?.resultType}
-            searchQuery={searchData?.query}
-            onLocateTech={handleLocateTech}
-            onClearSearch={handleClearSearch}
-          />
+        {canShowSidebar && !isMobile && (
+          <div
+            className={`transition-all duration-300 ease-in-out ${
+              sidebarOpen ? "w-80 min-w-[320px]" : "w-0 min-w-0 overflow-hidden"
+            }`}
+          >
+            <div className="min-w-[320px] h-full">
+              <TechSidebar
+                technicians={technicians}
+                selectedTech={selectedTech}
+                onSelect={handleTechSelect}
+                onClose={() => setSelectedTech(null)}
+                searchResults={searchData?.results}
+                searchResultType={searchData?.resultType}
+                searchQuery={searchData?.query}
+                onLocateTech={handleLocateTech}
+                onClearSearch={handleClearSearch}
+              />
+            </div>
+          </div>
         )}
 
-        {showSidebar && isMobile && (
+        {canShowSidebar && isMobile && (
           <Sheet open={!!selectedTech || !!searchData} onOpenChange={(o) => { if (!o) { setSelectedTech(null); setSearchData(null); } }}>
             <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl p-0">
               <TechSidebar
