@@ -1,6 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchAllTechnicians } from "@/lib/fetchAllTechnicians";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import TechForm from "@/components/TechForm";
@@ -28,25 +27,87 @@ const PRIORITY_LABELS: Record<string, string> = {
   last: "Last",
 };
 
+const PAGE_SIZE = 50;
+
 export default function Technicians() {
   const { user, role } = useAuth();
   const { toast } = useToast();
   const [technicians, setTechnicians] = useState<Tables<"technicians">[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTech, setEditingTech] = useState<Tables<"technicians"> | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [specialtyFilter, setSpecialtyFilter] = useState<string[]>([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 50;
+  const [loading, setLoading] = useState(true);
 
-  const fetchTechs = async () => {
-    const data = await fetchAllTechnicians();
-    setTechnicians(data);
-  };
+  // All specialties fetched once for the filter bar
+  const [allSpecialties, setAllSpecialties] = useState<string[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => { fetchTechs(); }, []);
+  // Debounce search input
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [search]);
+
+  // Fetch specialties once for filter bar
+  useEffect(() => {
+    async function fetchSpecialties() {
+      const { data } = await supabase
+        .from("technicians")
+        .select("specialty")
+        .not("specialty", "is", null);
+      if (data) {
+        const set = new Set<string>();
+        data.forEach((t: any) => t.specialty?.forEach((s: string) => set.add(s)));
+        setAllSpecialties(Array.from(set).sort());
+      }
+    }
+    fetchSpecialties();
+  }, []);
+
+  // Server-side paginated fetch
+  const fetchTechs = useCallback(async () => {
+    setLoading(true);
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    let query = supabase
+      .from("technicians")
+      .select("*", { count: "exact" })
+      .order("name")
+      .range(from, to);
+
+    // Server-side search filter
+    if (debouncedSearch.trim()) {
+      const q = `%${debouncedSearch.trim()}%`;
+      query = query.or(`name.ilike.${q},city.ilike.${q},state.ilike.${q},zip.ilike.${q}`);
+    }
+
+    // Server-side specialty filter
+    if (specialtyFilter.length > 0) {
+      query = query.overlaps("specialty", specialtyFilter);
+    }
+
+    const { data, count, error } = await query;
+    if (error) {
+      console.error("Fetch error:", error.message);
+    }
+    setTechnicians(data || []);
+    setTotalCount(count ?? 0);
+    setLoading(false);
+  }, [page, debouncedSearch, specialtyFilter]);
+
+  useEffect(() => { fetchTechs(); }, [fetchTechs]);
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const toggleActive = async (tech: Tables<"technicians">) => {
     const { error } = await supabase
@@ -110,13 +171,6 @@ export default function Technicians() {
     fetchTechs();
   };
 
-  // Unique specialties for filter
-  const allSpecialties = useMemo(() => {
-    const set = new Set<string>();
-    technicians.forEach((t) => t.specialty?.forEach((s) => set.add(s)));
-    return Array.from(set).sort();
-  }, [technicians]);
-
   const toggleSpecialty = (s: string) => {
     setSpecialtyFilter((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
@@ -124,32 +178,15 @@ export default function Technicians() {
     setPage(1);
   };
 
-  const filtered = technicians.filter((t) => {
-    const q = search.toLowerCase();
-    const matchesSearch =
-      !q ||
-      t.name.toLowerCase().includes(q) ||
-      t.city.toLowerCase().includes(q) ||
-      t.state.toLowerCase().includes(q) ||
-      t.zip.toLowerCase().includes(q);
-    const matchesSpecialty =
-      specialtyFilter.length === 0 ||
-      t.specialty?.some((s) => specialtyFilter.includes(s));
-    return matchesSearch && matchesSpecialty;
-  });
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginatedTechs = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  // Selection helpers
-  const allFilteredSelected = filtered.length > 0 && filtered.every((t) => selectedIds.has(t.id));
+  // Selection helpers — only for current page
+  const allPageSelected = technicians.length > 0 && technicians.every((t) => selectedIds.has(t.id));
   const someSelected = selectedIds.size > 0;
 
   const toggleAll = () => {
-    if (allFilteredSelected) {
+    if (allPageSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filtered.map((t) => t.id)));
+      setSelectedIds(new Set(technicians.map((t) => t.id)));
     }
   };
 
@@ -199,7 +236,7 @@ export default function Technicians() {
               aria-label="Search technicians"
               placeholder="Search by name, city, state, ZIP..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
             />
           </div>
@@ -217,7 +254,7 @@ export default function Technicians() {
                 </Badge>
               ))}
               {specialtyFilter.length > 0 && (
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSpecialtyFilter([])}>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setSpecialtyFilter([]); setPage(1); }}>
                   <X className="h-3 w-3 mr-1" /> Clear
                 </Button>
               )}
@@ -262,7 +299,7 @@ export default function Technicians() {
               <TableRow>
                 <TableHead className="w-10">
                   <Checkbox
-                    checked={allFilteredSelected}
+                    checked={allPageSelected}
                     onCheckedChange={toggleAll}
                     aria-label="Select all"
                   />
@@ -277,7 +314,19 @@ export default function Technicians() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedTechs.map((tech) => (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Loading...
+                  </TableCell>
+                </TableRow>
+              ) : technicians.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No technicians found
+                  </TableCell>
+                </TableRow>
+              ) : technicians.map((tech) => (
                 <TableRow key={tech.id} data-state={selectedIds.has(tech.id) ? "selected" : undefined}>
                   <TableCell>
                     <Checkbox
@@ -349,13 +398,6 @@ export default function Technicians() {
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No technicians found
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
         </div>
@@ -364,7 +406,7 @@ export default function Technicians() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-2">
             <p className="text-sm text-muted-foreground">
-              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount}
             </p>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
