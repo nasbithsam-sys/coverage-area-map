@@ -19,7 +19,7 @@ type AppRole = Database["public"]["Enums"]["app_role"];
 interface UserWithRole {
   user_id: string;
   role: AppRole;
-  profile: { full_name: string | null; email: string | null; otp_code?: string | null; totp_secret?: string | null } | null;
+  profile: { full_name: string | null; email: string | null; otp_code?: string | null; has_totp?: boolean } | null;
 }
 
 interface RoleManagementProps {
@@ -267,14 +267,14 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
                     {u.role === "admin" ? (
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="font-mono text-xs">
-                          {u.profile?.totp_secret ? "TOTP Active" : "TOTP Not Set"}
+                          {u.profile?.has_totp ? "TOTP Active" : "TOTP Not Set"}
                         </Badge>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
                           onClick={() => setupTotp(u.user_id)}
-                          title={u.profile?.totp_secret ? "Regenerate TOTP" : "Set up TOTP"}
+                          title={u.profile?.has_totp ? "Regenerate TOTP" : "Set up TOTP"}
                         >
                           <QrCode className="h-3.5 w-3.5" />
                         </Button>

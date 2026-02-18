@@ -26,7 +26,7 @@ interface ActivityRow {
 interface UserWithRole {
   user_id: string;
   role: AppRole;
-  profile: { full_name: string | null; email: string | null; otp_code?: string | null; totp_secret?: string | null } | null;
+  profile: { full_name: string | null; email: string | null; otp_code?: string | null; has_totp?: boolean } | null;
 }
 
 const CHART_COLORS = ["hsl(217, 71%, 45%)", "hsl(150, 60%, 40%)", "hsl(43, 96%, 56%)", "hsl(0, 72%, 51%)"];
@@ -45,7 +45,7 @@ export default function Admin() {
       .order("created_at", { ascending: false })
       .limit(50);
 
-    const { data: profilesData } = await supabase.from("profiles").select("user_id, full_name, email, otp_code, totp_secret");
+    const { data: profilesData } = await supabase.rpc("get_admin_profiles");
     const profileMap = new Map((profilesData || []).map(p => [p.user_id, p]));
 
     setActivities(
