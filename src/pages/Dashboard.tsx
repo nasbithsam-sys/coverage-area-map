@@ -8,7 +8,8 @@ import TechSidebar from "@/components/TechSidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import type { Tables } from "@/integrations/supabase/types";
-import { MapPin, Users, Globe, TrendingUp } from "lucide-react";
+import { MapPin, Users, Globe, TrendingUp, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const { role } = useAuth();
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [selectedTech, setSelectedTech] = useState<Tables<"technicians"> | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchData, setSearchData] = useState<SearchResultsData | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     async function fetchTechnicians() {
@@ -41,11 +43,13 @@ export default function Dashboard() {
 
   const handleTechSelect = (tech: Tables<"technicians">) => {
     setSelectedTech(tech);
+    setSidebarOpen(true); // Auto-open sidebar on tech select
   };
 
   const handleSearchResults = useCallback((data: SearchResultsData | null) => {
     setSearchData(data);
     if (!data) setSelectedTech(null);
+    if (data) setSidebarOpen(true); // Auto-open sidebar on search
   }, []);
 
   const handleLocateTech = useCallback((tech: Tables<"technicians">) => {
@@ -64,7 +68,8 @@ export default function Dashboard() {
   }, [searchData]);
 
   // Show sidebar when search results exist OR for showPins roles
-  const showSidebar = showPins || !!searchData;
+  const canShowSidebar = showPins || !!searchData;
+  const showSidebar = canShowSidebar && sidebarOpen;
 
   return (
     <AppLayout>
@@ -99,7 +104,20 @@ export default function Dashboard() {
             </div>
 
             {/* Map */}
-            <div className="animate-fade-in stagger-3">
+            <div className="animate-fade-in stagger-3 relative">
+              {/* Sidebar toggle button */}
+              {canShowSidebar && !isMobile && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="absolute top-3 right-3 z-10 h-8 w-8 bg-card/80 backdrop-blur-sm shadow-md"
+                  onClick={() => { setSidebarOpen((o) => !o); mapRef.current?.invalidateSize(); }}
+                  title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                >
+                  {sidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+                </Button>
+              )}
+
               {loading ? (
                 <div className="flex items-center justify-center h-48 md:h-64 map-container bg-card">
                   <div className="flex flex-col items-center gap-3">
