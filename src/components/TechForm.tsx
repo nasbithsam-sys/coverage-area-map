@@ -76,6 +76,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [priority, setPriority] = useState<string>((tech as any)?.priority || "normal");
+  const [isNew, setIsNew] = useState<string>(tech ? (tech.is_new ? "yes" : "no") : "yes");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -118,11 +119,11 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
       service_radius_miles: parseInt(form.get("radius") as string) || 25,
       notes: form.get("notes") as string || null,
       priority,
+      is_new: isNew === "yes",
     };
 
     if (!tech) {
       payload.created_by = user?.id;
-      payload.is_new = true;
     }
 
     if (tech) {
@@ -196,6 +197,18 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
               <SelectItem value="best">⭐ Best</SelectItem>
               <SelectItem value="normal">Normal</SelectItem>
               <SelectItem value="last">Last Priority</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>New Tech</Label>
+          <Select value={isNew} onValueChange={setIsNew}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="yes">New Tech</SelectItem>
+              <SelectItem value="no">-</SelectItem>
             </SelectContent>
           </Select>
         </div>
