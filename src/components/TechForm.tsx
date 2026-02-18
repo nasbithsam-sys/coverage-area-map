@@ -61,14 +61,22 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     const city = form.get("city") as string;
     const state = form.get("state") as string;
 
+    let latitude: number;
+    let longitude: number;
+
     const coords = guessCoords(city, state);
-    if (!coords) {
-      toast({ title: "Location not recognized", description: "Please use a known US city for auto-detection.", variant: "destructive" });
-      setLoading(false);
-      return;
+    if (coords) {
+      latitude = coords.lat;
+      longitude = coords.lng;
+    } else if (tech?.latitude && tech?.longitude) {
+      // Keep existing coordinates when editing
+      latitude = tech.latitude;
+      longitude = tech.longitude;
+    } else {
+      // For new techs with unknown city, default to 0,0 (will not show on map)
+      latitude = 0;
+      longitude = 0;
     }
-    const latitude = coords.lat;
-    const longitude = coords.lng;
 
     const specialtyRaw = form.get("specialty") as string;
     const specialty = specialtyRaw ? specialtyRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
