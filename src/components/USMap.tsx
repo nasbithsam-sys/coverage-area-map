@@ -7,7 +7,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
-import { Layers } from "lucide-react";
+import { Search, X, ChevronDown } from "lucide-react";
 
 interface CoverageZone {
   id: string;
@@ -220,7 +220,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
   const [searching, setSearching] = useState(false);
   const [hasSearchOverlay, setHasSearchOverlay] = useState(false);
   const [activeLayer, setActiveLayer] = useState<TileLayerKey>("street");
-  const [layerMenuOpen, setLayerMenuOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
 
   // Expose locateTech via ref
   useImperativeHandle(ref, () => ({
@@ -391,7 +391,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
 
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ", USA")}&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.005`
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ", USA")}&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.001`
       );
       const results = await res.json();
 
@@ -414,7 +414,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
         // PLACE: pin + popup + street zoom
         const pin = L.marker([searchLat, searchLon], {
           icon: L.divIcon({
-            html: `<div style="width:28px;height:28px;background:hsl(0,72%,51%);border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">
+            html: `<div style="width:28px;height:28px;background:#ea4335;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>`,
             className: "",
@@ -432,11 +432,10 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
           try {
             const geoLayer = L.geoJSON(result.geojson, {
               style: {
-                color: "hsl(0, 72%, 51%)",
-                fillColor: "hsl(0, 72%, 51%)",
-                fillOpacity: 0.08,
+                color: "#ea4335",
+                fillColor: "#ea4335",
+                fillOpacity: 0.04,
                 weight: 2.5,
-                dashArray: "10 6",
               },
             });
             searchLayerRef.current?.addLayer(geoLayer);
@@ -453,11 +452,10 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
           try {
             const geoLayer = L.geoJSON(result.geojson, {
               style: {
-                color: "hsl(0, 72%, 51%)",
-                fillColor: "hsl(0, 72%, 51%)",
-                fillOpacity: 0.06,
-                weight: 2,
-                dashArray: "8 6",
+                color: "#ea4335",
+                fillColor: "#ea4335",
+                fillOpacity: 0.04,
+                weight: 2.5,
               },
             });
             searchLayerRef.current?.addLayer(geoLayer);
@@ -499,13 +497,13 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
   };
 
   /** Fallback: try bounding box rectangle, else dashed circle */
-  function drawBboxOrCircleFallback(result: any, lat: number, lon: number, rType: SearchResultType) {
+  function drawBboxOrCircleFallback(result: any, lat: number, lon: number, _rType: SearchResultType) {
     if (!leafletMap.current || !searchLayerRef.current) return;
 
-    // Add a small center pin for non-address area searches
+    // Add a small center pin for reference
     const pin = L.marker([lat, lon], {
       icon: L.divIcon({
-        html: `<div style="width:22px;height:22px;background:hsl(0,72%,51%);border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
+        html: `<div style="width:22px;height:22px;background:#ea4335;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
         className: "",
         iconSize: L.point(22, 22),
         iconAnchor: L.point(11, 11),
@@ -520,19 +518,8 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       const west = parseFloat(result.boundingbox[2]);
       const east = parseFloat(result.boundingbox[3]);
       const bounds: L.LatLngBoundsExpression = [[south, west], [north, east]];
-
-      const rect = L.rectangle(bounds, {
-        color: "hsl(0, 72%, 51%)",
-        fillColor: "hsl(0, 72%, 51%)",
-        fillOpacity: 0.06,
-        weight: 2,
-        dashArray: "8 6",
-        interactive: false,
-      });
-      searchLayerRef.current.addLayer(rect);
       leafletMap.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14, animate: true });
     } else {
-      // No polygon or bbox — just zoom to center
       leafletMap.current.setView([lat, lon], 12, { animate: true });
     }
   }
@@ -540,84 +527,84 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
   return (
     <div className="relative w-full h-full">
       {showSearch && (
-        <div className="absolute top-3 left-3 z-[1000] flex gap-2 items-center">
-          <input
-            type="text"
-            placeholder="Search zip, city, state, address..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="h-10 w-72 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-md ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <button
-            onClick={handleSearch}
-            disabled={searching}
-            className="h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium shadow-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5 min-w-[80px] justify-center"
-          >
-            {searching ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
-            ) : (
-              "Search"
+        <div className="absolute top-3 left-3 z-[1000] flex items-center">
+          <div className="flex items-center bg-card/95 backdrop-blur-md rounded-full shadow-lg border border-border/50 px-1 h-11 w-80">
+            <div className="flex items-center justify-center w-9 h-9 shrink-0">
+              {searching ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
+              ) : (
+                <Search className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+            <input
+              type="text"
+              placeholder="Search zip, city, state, address..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="flex-1 h-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+            />
+            {(searchQuery || hasSearchOverlay) && (
+              <button
+                onClick={clearSearchOverlay}
+                className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-muted transition-colors shrink-0"
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
             )}
-          </button>
-          {hasSearchOverlay && (
-            <button
-              onClick={clearSearchOverlay}
-              className="h-10 px-3 rounded-md bg-card text-foreground text-xs font-medium shadow-md border border-input hover:bg-muted transition-colors"
-            >
-              Clear
-            </button>
-          )}
+          </div>
         </div>
       )}
 
-      {/* Base map layer switcher */}
-      <div className="absolute top-3 right-3 z-[1000]">
-        <div className="relative">
-          <button
-            onClick={() => setLayerMenuOpen(!layerMenuOpen)}
-            className="h-10 w-10 rounded-md bg-card text-foreground shadow-md border border-input hover:bg-muted transition-colors flex items-center justify-center"
-            title="Change map style"
-          >
-            <Layers className="h-4 w-4" />
-          </button>
-          {layerMenuOpen && (
-            <div className="absolute top-12 right-0 bg-card border border-border rounded-lg shadow-xl p-1.5 space-y-0.5 min-w-[140px]">
-              {(Object.keys(TILE_LAYERS) as TileLayerKey[]).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => { setActiveLayer(key); setLayerMenuOpen(false); }}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    activeLayer === key
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-foreground"
-                  }`}
-                >
-                  {TILE_LAYERS[key].label}
-                </button>
-              ))}
+      {/* Layer switcher — bottom-left thumbnail toggle */}
+      <div className="absolute bottom-3 right-3 z-[1000]">
+        <button
+          onClick={() => setActiveLayer(activeLayer === "street" ? "satellite" : "street")}
+          className="group relative w-16 h-16 rounded-lg overflow-hidden shadow-lg border-2 border-card hover:border-primary/50 transition-all"
+          title={`Switch to ${activeLayer === "street" ? "Satellite" : "Street"}`}
+        >
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/60" />
+          <span className="absolute bottom-0.5 left-0 right-0 text-[10px] font-semibold text-white text-center leading-tight">
+            {activeLayer === "street" ? "Satellite" : "Street"}
+          </span>
+          {/* Simple colored preview */}
+          <div className={`absolute inset-0 ${activeLayer === "street" ? "bg-emerald-800" : "bg-blue-100"}`} />
+        </button>
+      </div>
+
+      {/* Coverage legend — compact, collapsible */}
+      <div className="absolute bottom-3 left-3 z-[1000]">
+        <button
+          onClick={() => setLegendOpen(!legendOpen)}
+          className="flex items-center gap-1.5 bg-card/90 backdrop-blur-md rounded-lg shadow-md border border-border/50 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-card transition-colors"
+        >
+          <div className="flex gap-1">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.strong }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.moderate }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.weak }} />
+          </div>
+          <span>Coverage</span>
+          <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${legendOpen ? "rotate-180" : ""}`} />
+        </button>
+        {legendOpen && (
+          <div className="mt-1.5 bg-card/90 backdrop-blur-md rounded-lg shadow-lg border border-border/50 p-2.5 text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.strong }} />
+              <span className="text-muted-foreground">Strong</span>
             </div>
-          )}
-        </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.moderate }} />
+              <span className="text-muted-foreground">Moderate</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.weak }} />
+              <span className="text-muted-foreground">Weak</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div ref={mapRef} className="w-full h-full rounded-lg" style={{ minHeight: "500px" }} />
-
-      <div className="absolute bottom-3 left-3 z-[1000] bg-card/95 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs space-y-1.5">
-        <p className="font-semibold text-foreground mb-1">Coverage Zones</p>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.strong }} />
-          <span className="text-muted-foreground">Strong</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.moderate }} />
-          <span className="text-muted-foreground">Moderate</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COVERAGE_COLORS.weak }} />
-          <span className="text-muted-foreground">Weak</span>
-        </div>
-      </div>
     </div>
   );
 });
