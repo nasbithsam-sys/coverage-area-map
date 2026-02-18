@@ -23,7 +23,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function fetchTechnicians() {
-      const { data } = await supabase.from("technicians").select("*").order("name");
+      const { data } = await supabase.from("technicians").select("*").order("name").limit(10000);
       setTechnicians(data || []);
       setLoading(false);
     }

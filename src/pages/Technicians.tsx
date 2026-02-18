@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Search, Pencil, Power, Trash2, X } from "lucide-react";
+import { Plus, Search, Pencil, Power, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -37,9 +37,11 @@ export default function Technicians() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [specialtyFilter, setSpecialtyFilter] = useState<string[]>([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const fetchTechs = async () => {
-    const { data } = await supabase.from("technicians").select("*").order("name");
+    const { data } = await supabase.from("technicians").select("*").order("name").limit(10000);
     setTechnicians(data || []);
   };
 
@@ -118,6 +120,7 @@ export default function Technicians() {
     setSpecialtyFilter((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     );
+    setPage(1);
   };
 
   const filtered = technicians.filter((t) => {
@@ -133,6 +136,9 @@ export default function Technicians() {
       t.specialty?.some((s) => specialtyFilter.includes(s));
     return matchesSearch && matchesSpecialty;
   });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginatedTechs = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Selection helpers
   const allFilteredSelected = filtered.length > 0 && filtered.every((t) => selectedIds.has(t.id));
@@ -192,7 +198,7 @@ export default function Technicians() {
               aria-label="Search technicians"
               placeholder="Search by name, city, state, ZIP..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9"
             />
           </div>
@@ -270,7 +276,7 @@ export default function Technicians() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((tech) => (
+              {paginatedTechs.map((tech) => (
                 <TableRow key={tech.id} data-state={selectedIds.has(tech.id) ? "selected" : undefined}>
                   <TableCell>
                     <Checkbox
@@ -352,6 +358,24 @@ export default function Technicians() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-sm text-muted-foreground">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm font-medium">Page {page} of {totalPages}</span>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );

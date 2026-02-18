@@ -353,8 +353,8 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
           radius: milesToMeters(tech.service_radius_miles),
           color: "hsl(217, 71%, 45%)",
           fillColor: "hsl(217, 71%, 45%)",
-          fillOpacity: 0.06,
-          weight: 0.5,
+          fillOpacity: 0.12,
+          weight: 1,
           interactive: false,
         }).addTo(radiusRef.current!);
       });
