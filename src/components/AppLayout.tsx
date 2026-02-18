@@ -2,16 +2,50 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { MapPin, Users, Shield, LogOut, ChevronRight, Menu } from "lucide-react";
+import { MapPin, Users, Shield, LogOut, ChevronRight, Menu, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const navItems = [
-{ path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "processor", "admin"] as const },
-{ path: "/technicians", label: "Technicians", icon: Users, roles: ["processor", "admin"] as const },
-{ path: "/admin", label: "Admin", icon: Shield, roles: ["admin"] as const }];
+  { path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "processor", "admin"] as const },
+  { path: "/technicians", label: "Technicians", icon: Users, roles: ["processor", "admin"] as const },
+  { path: "/admin", label: "Admin", icon: Shield, roles: ["admin"] as const },
+];
 
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+
+  useEffect(() => {
+    if (dark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [dark]);
+
+  // Init from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark") setDark(true);
+    else if (saved === "light") setDark(false);
+    else if (window.matchMedia("(prefers-color-scheme: dark)").matches) setDark(true);
+  }, []);
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+      onClick={() => setDark((d) => !d)}
+      aria-label="Toggle theme"
+    >
+      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 function SidebarContent({ role, user, signOut, visibleNav, location, onNavigate }: any) {
   return (
@@ -38,33 +72,34 @@ function SidebarContent({ role, user, signOut, visibleNav, location, onNavigate 
                 <span className="flex-1">{item.label}</span>
                 {active && <ChevronRight className="h-3.5 w-3.5 opacity-40" />}
               </div>
-            </Link>);
-
+            </Link>
+          );
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 mb-3">
+      <div className="p-4 border-t border-sidebar-border space-y-3">
+        <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg bg-sidebar-accent flex items-center justify-center text-xs font-bold text-sidebar-primary uppercase">
             {user?.email?.charAt(0) || "U"}
           </div>
           <p className="text-xs text-sidebar-foreground/60 truncate flex-1">{user?.email}</p>
+          <ThemeToggle />
         </div>
         <Button
           variant="ghost"
           size="sm"
           className="w-full justify-start gap-2 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent text-xs h-8"
-          onClick={signOut}>
-
+          onClick={signOut}
+        >
           <LogOut className="h-3.5 w-3.5" />
           Sign Out
         </Button>
       </div>
-    </>);
-
+    </>
+  );
 }
 
-export default function AppLayout({ children }: {children: React.ReactNode;}) {
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { role, user, signOut } = useAuth();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -95,8 +130,8 @@ export default function AppLayout({ children }: {children: React.ReactNode;}) {
           </div>
         </header>
         <main className="flex-1 overflow-auto bg-background">{children}</main>
-      </div>);
-
+      </div>
+    );
   }
 
   return (
@@ -105,6 +140,6 @@ export default function AppLayout({ children }: {children: React.ReactNode;}) {
         <SidebarContent {...sidebarProps} />
       </aside>
       <main className="flex-1 overflow-auto bg-background">{children}</main>
-    </div>);
-
+    </div>
+  );
 }
