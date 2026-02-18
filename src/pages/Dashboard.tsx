@@ -112,7 +112,7 @@ export default function Dashboard() {
                   size="icon"
                   className="absolute top-3 right-3 z-10 h-8 w-8 bg-card/80 backdrop-blur-sm shadow-md"
                   onClick={() => { setSidebarOpen((o) => !o); mapRef.current?.invalidateSize(); }}
-                  title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                  aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
                 >
                   {sidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
                 </Button>

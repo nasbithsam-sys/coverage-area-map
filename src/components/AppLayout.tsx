@@ -79,8 +79,8 @@ export default function AppLayout({ children }: {children: React.ReactNode;}) {
         <header className="flex items-center gap-3 px-4 py-3 border-b border-border glass-sidebar">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-sidebar-foreground">
-                <Menu className="h-5 w-5" />
+              <Button variant="ghost" size="icon" aria-label="Open navigation menu" className="h-9 w-9 text-sidebar-foreground">
+                <Menu className="h-5 w-5" aria-hidden="true" />
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-[260px] p-0 glass-sidebar border-sidebar-border">
@@ -101,7 +101,7 @@ export default function AppLayout({ children }: {children: React.ReactNode;}) {
 
   return (
     <div className="flex min-h-screen w-full">
-      <aside className="w-[260px] glass-sidebar border-r border-sidebar-border flex flex-col shrink-0">
+      <aside aria-label="Main navigation" className="w-[260px] glass-sidebar border-r border-sidebar-border flex flex-col shrink-0">
         <SidebarContent {...sidebarProps} />
       </aside>
       <main className="flex-1 overflow-auto bg-background">{children}</main>
