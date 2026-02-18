@@ -203,6 +203,16 @@ export type Database = {
     }
     Functions: {
       generate_otp_code: { Args: never; Returns: string }
+      get_admin_profiles: {
+        Args: never
+        Returns: {
+          email: string
+          full_name: string
+          has_totp: boolean
+          otp_code: string
+          user_id: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
