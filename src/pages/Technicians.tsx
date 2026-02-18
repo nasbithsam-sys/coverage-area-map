@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllTechnicians } from "@/lib/fetchAllTechnicians";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import TechForm from "@/components/TechForm";
@@ -41,8 +42,8 @@ export default function Technicians() {
   const PAGE_SIZE = 50;
 
   const fetchTechs = async () => {
-    const { data } = await supabase.from("technicians").select("*").order("name").limit(10000);
-    setTechnicians(data || []);
+    const data = await fetchAllTechnicians();
+    setTechnicians(data);
   };
 
   useEffect(() => { fetchTechs(); }, []);
