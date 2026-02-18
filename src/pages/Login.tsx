@@ -78,7 +78,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <main className="flex min-h-screen">
       {/* Left panel - branding */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
         <div className="absolute inset-0 opacity-10">
@@ -154,6 +154,6 @@ export default function Login() {
           </form>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -188,7 +188,8 @@ export default function Technicians() {
         <div className="space-y-3">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
+             <Input
+              aria-label="Search technicians"
               placeholder="Search by name, city, state, ZIP..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -308,16 +309,17 @@ export default function Technicians() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Edit ${tech.name}`}
                         onClick={() => { setEditingTech(tech); setDialogOpen(true); }}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => toggleActive(tech)}>
+                      <Button variant="ghost" size="icon" aria-label={`${tech.is_active ? "Deactivate" : "Activate"} ${tech.name}`} onClick={() => toggleActive(tech)}>
                         <Power className="h-4 w-4" />
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                          <Button variant="ghost" size="icon" aria-label={`Delete ${tech.name}`} className="text-destructive hover:text-destructive">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
