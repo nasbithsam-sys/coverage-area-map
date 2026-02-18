@@ -71,18 +71,14 @@ export default function Technicians() {
 
   const bulkDelete = async () => {
     const ids = Array.from(selectedIds);
-    const BATCH_SIZE = 50;
-    let hasError = false;
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const batch = ids.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from("technicians").delete().in("id", batch);
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        hasError = true;
-        break;
+    const { error } = await supabase.from("technicians").delete().in("id", ids);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      for (const id of ids) {
+        const tech = technicians.find((t) => t.id === id);
+        if (tech) await logActivity("deleted", "technician", tech.id, { name: tech.name });
       }
-    }
-    if (!hasError) {
       toast({ title: `${ids.length} technician(s) removed` });
       setSelectedIds(new Set());
       fetchTechs();
@@ -91,7 +87,7 @@ export default function Technicians() {
   };
 
   const logActivity = async (action: string, entity: string, entityId: string, details: Record<string, unknown>) => {
-    if (!user) return;
+    if (!user || role === "admin") return;
     await supabase.from("activity_log").insert([{
       user_id: user.id,
       action_type: action,
