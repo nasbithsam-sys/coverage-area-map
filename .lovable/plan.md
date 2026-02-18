@@ -1,41 +1,21 @@
 
 
-# Fix: Console Warnings for Ref on Function Components
+# Fix: Add `autocomplete` Attributes to Login Form
 
-## Problem
-The console shows two React warnings on the Technicians page:
-- "Function components cannot be given refs" for `Dialog` (check render method of `Technicians`)
-- "Function components cannot be given refs" for `DialogPortal` (check render method of `DialogContent`)
+## What's happening
+The browser flags a best-practice warning on the login page: input fields should have `autocomplete` attributes for better accessibility and password-manager support.
 
-These occur because `DialogPrimitive.Root` and `DialogPrimitive.Portal` from Radix UI are plain function components that don't support `forwardRef`, but React is attempting to pass refs to them.
+All other console messages (postMessage origin mismatches, Tailwind CDN warning) come from the preview infrastructure -- they are not from your code and cannot be fixed on your side.
 
-## Solution
-Wrap `Dialog` and `DialogPortal` in `React.forwardRef` inside `src/components/ui/dialog.tsx` so they can safely accept (and ignore) refs without triggering warnings.
+## Changes
 
-## Technical Details
+**File: `src/pages/Login.tsx`**
 
-**File: `src/components/ui/dialog.tsx`**
+Add `autoComplete` props to the three form inputs:
 
-Replace the plain assignments:
-```typescript
-const Dialog = DialogPrimitive.Root;
-const DialogPortal = DialogPrimitive.Portal;
-```
+- Email input: `autoComplete="email"`
+- Password input: `autoComplete="current-password"`
+- OTP input: `autoComplete="one-time-code"`
 
-With forwardRef wrappers:
-```typescript
-const Dialog = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>
->((props, _ref) => <DialogPrimitive.Root {...props} />);
-Dialog.displayName = "Dialog";
-
-const DialogPortal = React.forwardRef<
-  any,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>
->((props, _ref) => <DialogPrimitive.Portal {...props} />);
-DialogPortal.displayName = "DialogPortal";
-```
-
-This eliminates both console warnings without changing any behavior.
+This is a small, safe change that silences the browser warning and improves usability with password managers.
 
