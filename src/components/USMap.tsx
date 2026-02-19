@@ -55,6 +55,12 @@ function milesToMeters(miles: number) {
   return miles * 1609.34;
 }
 
+function isValidUSCoordinate(lat: number, lng: number): boolean {
+  if (lat === 0 && lng === 0) return false;
+  // Continental US + Hawaii + Alaska (generous bounds)
+  return lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65;
+}
+
 type SearchResultType = "address" | "neighborhood" | "zip" | "city" | "state" | "unknown";
 
 const STATE_ABBR_TO_NAME: Record<string, string> = {
@@ -129,7 +135,7 @@ function filterTechsBySearch(
   searchQuery: string
 ): { results: SearchResultItem[]; isFallback: boolean } {
   // Filter out techs with invalid (0,0) coordinates before distance calculation
-  const validTechs = technicians.filter((t) => t.latitude !== 0 || t.longitude !== 0);
+  const validTechs = technicians.filter((t) => isValidUSCoordinate(t.latitude, t.longitude));
   const allWithDist = validTechs.map((t) => ({
     tech: t,
     distanceMiles: getDistanceMiles(searchLat, searchLon, t.latitude, t.longitude),
@@ -346,7 +352,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     clusterRef.current.clearLayers();
     radiusRef.current?.clearLayers();
 
-    let techs = technicians.filter((t) => t.is_active && (t.latitude !== 0 || t.longitude !== 0));
+    let techs = technicians.filter((t) => t.is_active && isValidUSCoordinate(t.latitude, t.longitude));
     if (filteredTechIds) {
       techs = techs.filter((t) => filteredTechIds.has(t.id));
     }
@@ -398,6 +404,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
 
       const toRender = visibleTechs.slice(0, MAX_VISIBLE_RADII);
       toRender.forEach((tech) => {
+        if (!(tech.service_radius_miles > 0 && tech.service_radius_miles < 500)) return;
         L.circle([tech.latitude, tech.longitude], {
           radius: milesToMeters(tech.service_radius_miles),
           color: "hsl(217, 71%, 45%)",
