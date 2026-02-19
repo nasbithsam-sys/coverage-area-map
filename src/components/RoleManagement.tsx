@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -70,7 +71,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
       .update({ role: newRole })
       .eq("user_id", userId);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } else {
       toast({ title: "Role updated" });
       onRefresh();
@@ -154,7 +155,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
       .update({ otp_code: newOtp })
       .eq("user_id", userId);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } else {
       toast({ title: "OTP regenerated", description: `New code: ${newOtp}` });
       onRefresh();

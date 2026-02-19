@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -86,7 +87,7 @@ export default function CoverageZoneManager() {
       });
 
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
       } else {
         toast({ title: "Coverage zone added" });
         setName("");
@@ -104,7 +105,7 @@ export default function CoverageZoneManager() {
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from("coverage_zones").delete().eq("id", id);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } else {
       toast({ title: "Zone deleted" });
       fetchZones();

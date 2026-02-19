@@ -6,6 +6,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Rate limiter: max 20 operations per admin per hour
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const MAX_OPS = 20;
+const opsMap = new Map<string, { count: number; firstAttempt: number }>();
+
+function isRateLimited(adminId: string): boolean {
+  const now = Date.now();
+  const entry = opsMap.get(adminId);
+  if (!entry || now - entry.firstAttempt > RATE_LIMIT_WINDOW_MS) {
+    opsMap.set(adminId, { count: 1, firstAttempt: now });
+    return false;
+  }
+  entry.count++;
+  return entry.count > MAX_OPS;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -44,6 +60,14 @@ Deno.serve(async (req) => {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Rate limit check
+    if (isRateLimited(caller.id)) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const { action, user_id, new_password } = await req.json();
@@ -95,9 +119,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      if (new_password.length < 6) {
+      if (new_password.length < 8) {
         return new Response(
-          JSON.stringify({ error: "Password must be at least 6 characters" }),
+          JSON.stringify({ error: "Password must be at least 8 characters" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -122,8 +146,8 @@ Deno.serve(async (req) => {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (_e) {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

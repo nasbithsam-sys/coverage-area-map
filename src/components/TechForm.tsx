@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -129,7 +130,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     if (tech) {
       const { error } = await supabase.from("technicians").update(payload).eq("id", tech.id);
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
       } else {
         await logActivity("edited", "technician", tech.id, { name: payload.name, changes: "updated details" });
         toast({ title: "Technician updated" });
@@ -138,7 +139,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     } else {
       const { data, error } = await supabase.from("technicians").insert(payload).select().single();
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
       } else {
         await logActivity("added", "technician", data.id, { name: payload.name });
         toast({ title: "Technician added" });

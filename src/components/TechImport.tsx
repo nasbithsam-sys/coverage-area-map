@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -162,7 +163,7 @@ export default function TechImport({ onImported, technicians, role }: Props) {
 
       const { error } = await supabase.from("technicians").insert(records);
       if (error) {
-        toast({ title: "Import error", description: error.message, variant: "destructive" });
+        toast({ title: "Import error", description: getSafeErrorMessage(error), variant: "destructive" });
       } else {
         toast({ title: `Imported ${records.length} technicians` });
         onImported();
