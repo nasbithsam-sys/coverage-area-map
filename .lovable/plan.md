@@ -1,86 +1,72 @@
 
 
-# Fix Search, Table Columns, and Cluster Zoom Behavior
+# Improve Search Resilience and Map Performance
 
-## 3 Issues to Address
+## Two Problems to Fix
 
-### 1. Search should always return results (never "Nothing detected")
+### 1. Full address searches fail (e.g. "4662 S Badger Court, Littleton, CO 80127")
 
-**Problem:** When users search for a street address, neighborhood, zip code, city, or state, the search sometimes shows "No locations found" because Nominatim doesn't return a match for the exact query format.
+The current retry logic tries:
+1. Query + ", USA" (fails for this address)
+2. Query with `countrycodes=us` (also fails)
+3. Falls back to nearest techs from map center (not useful)
 
-**Fix:** Improve the search to be more resilient:
-- Try the original query first, then retry with cleaned-up variations (e.g. strip "USA" suffix, try with just the raw query) if the first attempt returns no results.
-- For the `filterTechsBySearch` function: when the result type is "unknown" or no exact matches are found, always fall back to the nearest 10 technicians instead of showing nothing.
-- Also handle cases where `detectResultType` returns "unknown" by treating it as an address-style search (nearest 10 techs).
+From the network logs, "4662 S Badger Court, USA" (without city/state/zip) actually succeeds. The issue is Nominatim's handling of comma-separated full addresses.
 
-**File:** `src/components/USMap.tsx`
-- In `handleSearch`: add a retry with alternative query formats when `results.length === 0`.
-- In `filterTechsBySearch`: ensure the `"unknown"` case returns nearest 10 (already does, but make explicit).
-- Change the error toast to be softer and still show nearest techs even when geocoding partially fails.
+**Fix:** Add a multi-step retry cascade in `handleSearch`:
+1. Try original query + ", USA" (current)
+2. Try original query with `countrycodes=us` (current)
+3. NEW: Try a "structured" Nominatim query using `street=`, `city=`, `state=`, `postalcode=` parameters by parsing the comma-separated parts
+4. NEW: Try just the raw query without any suffix (no ", USA", no countrycodes filter)
+5. NEW: Try progressively shorter versions - strip the street number, then strip the street entirely
+6. Only after all retries fail, fall back to nearest techs from map center
 
-### 2. Technicians table columns should be: Name, Number, Location, Specialties, Priority, Status, Actions
+This ensures virtually any address format resolves to a location.
 
-**Problem:** The current column order is: Name, Location, Specialties, Radius, Priority, Status, Actions. The user wants "Number" (phone) shown and "Radius" removed.
+### 2. Map sluggish with 6000+ technicians
 
-**Fix:** In the Technicians page table:
-- Remove the "Radius" column.
-- Add a "Number" (phone) column after "Name".
-- Column order becomes: Checkbox, Name, Number, Location, Specialties, Priority, Status, Actions.
+Currently every active tech gets:
+- An `L.circle` for service radius (added to `radiusRef` layer group - NOT clustered)
+- An `L.circleMarker` for the pin (added to cluster group)
 
-**File:** `src/pages/Technicians.tsx`
-- Remove the `SortableHead` for `service_radius_miles` and its corresponding `TableCell`.
-- Add a `TableHead` for "Number" after the Name column.
-- Add a `TableCell` showing `tech.phone || "-"` in the corresponding position.
+With 6000 techs, that means ~6000 unclustered radius circles always rendering, which is extremely heavy.
 
-### 3. Clusters should split into individual markers with visible radius when zooming in
+**Fix:** Only render service radius circles for techs visible at the current zoom/bounds:
+- Remove the bulk radius rendering from the main `useEffect`
+- Add a `moveend`/`zoomend` event listener on the map that renders radius circles only for techs currently in the viewport AND only when zoom level >= 10 (when radii are actually meaningful to see)
+- Cap visible radius circles to a reasonable limit (e.g. 200 max) to prevent lag when panned over dense areas
+- This keeps the clustered markers performant while still showing radii when zoomed in
 
-**Problem:** The marker cluster group uses `maxClusterRadius: 50` which can keep techs clustered even at high zoom levels, preventing users from seeing individual tech radii clearly.
+## Files to Change
 
-**Fix:** Adjust the `MarkerClusterGroup` settings so clusters break apart at closer zoom levels:
-- Set `disableClusteringAtZoom: 12` so that at zoom level 12 and above, all markers are shown individually with their service radius circles visible.
-- Keep `spiderfyOnMaxZoom: true` as a safety net.
-
-**File:** `src/components/USMap.tsx`
-- Add `disableClusteringAtZoom: 12` to the `L.markerClusterGroup()` config (around line 280).
-
----
+**`src/components/USMap.tsx`** - both fixes in this single file
 
 ## Technical Details
 
-### USMap.tsx - Search improvements (handleSearch function)
+### Search retry cascade (handleSearch)
 
-Add retry logic when Nominatim returns 0 results:
-```typescript
-// If no results with ", USA" suffix, retry without it
-if (results.length === 0) {
-  const retryRes = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=us&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.001`
-  );
-  results = await retryRes.json();
-}
+```text
+Attempt 1: query + ", USA"
+Attempt 2: query + countrycodes=us  
+Attempt 3: structured query (parse commas into street/city/state/zip params)
+Attempt 4: raw query (no modifications)
+Attempt 5: remove street number, retry
+Attempt 6: fall back to nearest techs from map center
 ```
 
-Also ensure that even when geocoding fails completely, we show nearest techs by distance from map center rather than showing nothing.
+The structured query parsing will handle inputs like "4662 S Badger Court, Littleton, CO 80127" by splitting on commas and mapping parts to Nominatim's `street`, `city`, `state`, `postalcode` parameters.
 
-### USMap.tsx - Cluster config
+### Performance: viewport-based radius rendering
 
-```typescript
-L.markerClusterGroup({
-  maxClusterRadius: 50,
-  spiderfyOnMaxZoom: true,
-  showCoverageOnHover: false,
-  zoomToBoundsOnClick: true,
-  disableClusteringAtZoom: 12,  // NEW: show individual markers at zoom 12+
-  // ... iconCreateFunction stays the same
-});
+```text
+Current flow:
+  technicians change -> draw ALL 6000 radius circles + ALL 6000 markers
+
+New flow:  
+  technicians change -> draw ALL markers into cluster group (clusters handle perf)
+  map moveend/zoomend -> if zoom >= 10, draw radius circles for visible techs only (max 200)
+  map zoom < 10 -> clear all radius circles (too small to see anyway)
 ```
 
-### Technicians.tsx - Column changes
-
-Remove the Radius column and add Number column:
-```
-Header row: [Checkbox] [Name] [Number] [Location] [Specialties] [Priority] [Status] [Actions]
-```
-
-The Number cell will display the technician's phone number or a dash if empty.
+This reduces the number of rendered radius circles from 6000 to typically 10-50 at any given time, dramatically improving pan/zoom performance.
 
