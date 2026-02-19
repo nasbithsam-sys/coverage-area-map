@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Download } from "lucide-react";
+import { Upload, Download, Database } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 interface Props {
@@ -19,8 +19,28 @@ export default function TechImport({ onImported, technicians, role }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [importing, setImporting] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [importStatus, setImportStatus] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Seed ZIP centroids table from static dataset
+  const seedZipCentroids = async () => {
+    setSeeding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("geocode-zips", {
+        body: {},
+      });
+      if (error) {
+        toast({ title: "Seed error", description: getSafeErrorMessage(error), variant: "destructive" });
+      } else {
+        toast({ title: "ZIP centroids loaded", description: `${data?.count ?? 0} ZIP codes ready` });
+      }
+    } catch (err: any) {
+      toast({ title: "Seed error", description: err.message, variant: "destructive" });
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const exportCSV = () => {
     const rows = [CSV_HEADERS.join(",")];
@@ -104,39 +124,44 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         return;
       }
 
-      // Identify rows needing ZIP geocoding (missing or invalid lat/lng)
-      const needsGeocode: string[] = [];
+      // Collect ZIPs that need centroid lookup
+      const zipsNeeded: Set<string> = new Set();
       for (const row of parsed) {
         const lat = parseFloat(row.rawLat);
         const lng = parseFloat(row.rawLng);
         const hasValid = !isNaN(lat) && !isNaN(lng) && !(lat === 0 && lng === 0) &&
           lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65;
         if (!hasValid && row.zip && row.zip !== "00000") {
-          needsGeocode.push(row.zip);
+          zipsNeeded.add(row.zip.padStart(5, "0"));
         }
       }
 
-      // Resolve ZIP centroids
+      // Query zip_centroids table directly (no Nominatim, instant)
       let centroidMap: Record<string, { latitude: number; longitude: number }> = {};
-      const uniqueZips = [...new Set(needsGeocode)];
+      const uniqueZips = [...zipsNeeded];
 
       if (uniqueZips.length > 0) {
-        setImportStatus(`Geocoding ${uniqueZips.length} ZIP codes...`);
+        setImportStatus(`Looking up ${uniqueZips.length} ZIP centroids...`);
 
-        // Batch in groups of 50 to avoid timeout
-        for (let i = 0; i < uniqueZips.length; i += 50) {
-          const batch = uniqueZips.slice(i, i + 50);
-          setImportStatus(`Geocoding ZIPs ${i + 1}-${Math.min(i + 50, uniqueZips.length)} of ${uniqueZips.length}...`);
-          try {
-            const { data, error } = await supabase.functions.invoke("geocode-zips", {
-              body: { zips: batch },
-            });
-            if (!error && data?.centroids) {
-              centroidMap = { ...centroidMap, ...data.centroids };
+        // Query in batches of 500 (Supabase IN clause limit)
+        for (let i = 0; i < uniqueZips.length; i += 500) {
+          const batch = uniqueZips.slice(i, i + 500);
+          const { data } = await supabase
+            .from("zip_centroids")
+            .select("zip, latitude, longitude")
+            .in("zip", batch);
+
+          if (data) {
+            for (const row of data) {
+              centroidMap[row.zip] = { latitude: row.latitude, longitude: row.longitude };
             }
-          } catch {
-            // Continue with what we have
           }
+        }
+
+        const resolved = Object.keys(centroidMap).length;
+        const unresolved = uniqueZips.length - resolved;
+        if (unresolved > 0) {
+          console.warn(`${unresolved} ZIP codes not found in centroids table. Seed the table first.`);
         }
       }
 
@@ -151,13 +176,11 @@ export default function TechImport({ onImported, technicians, role }: Props) {
           lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65;
 
         if (!hasValid) {
-          // Try ZIP centroid
           const centroid = centroidMap[row.zip.padStart(5, "0")];
           if (centroid) {
             lat = centroid.latitude;
             lng = centroid.longitude;
           } else {
-            // Skip techs with no valid coordinates
             lat = 0;
             lng = 0;
           }
@@ -191,7 +214,11 @@ export default function TechImport({ onImported, technicians, role }: Props) {
       }
 
       const geocoded = records.filter(r => r.latitude !== 0).length;
-      toast({ title: `Imported ${records.length} technicians`, description: `${geocoded} with valid coordinates` });
+      const failed = records.length - geocoded;
+      toast({
+        title: `Imported ${records.length} technicians`,
+        description: `${geocoded} with coordinates${failed > 0 ? `, ${failed} without (seed ZIP table first)` : ""}`,
+      });
       onImported();
     } catch (err: any) {
       toast({ title: "File error", description: err.message, variant: "destructive" });
@@ -213,10 +240,16 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         <span className="text-xs text-muted-foreground animate-pulse">{importStatus}</span>
       )}
       {role === "admin" && (
-        <Button variant="outline" size="sm" onClick={exportCSV}>
-          <Download className="h-4 w-4 mr-1.5" />
-          Export
-        </Button>
+        <>
+          <Button variant="outline" size="sm" onClick={exportCSV}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={seedZipCentroids} disabled={seeding}>
+            <Database className="h-4 w-4 mr-1.5" />
+            {seeding ? "Loading ZIPs..." : "Seed ZIPs"}
+          </Button>
+        </>
       )}
     </div>
   );
