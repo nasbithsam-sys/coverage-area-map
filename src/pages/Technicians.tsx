@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
@@ -147,7 +148,7 @@ export default function Technicians() {
   const deleteTech = async (tech: Tables<"technicians">) => {
     const { error } = await supabase.from("technicians").delete().eq("id", tech.id);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } else {
       await logActivity("deleted", "technician", tech.id, { name: tech.name });
       toast({ title: "Technician removed" });
@@ -163,7 +164,7 @@ export default function Technicians() {
       const batch = ids.slice(i, i + BATCH_SIZE);
       const { error } = await supabase.from("technicians").delete().in("id", batch);
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
         hasError = true;
         break;
       }

@@ -6,6 +6,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Rate limiter: max 10 creates per admin per hour
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const MAX_CREATES = 10;
+const createAttempts = new Map<string, { count: number; firstAttempt: number }>();
+
+function isRateLimited(adminId: string): boolean {
+  const now = Date.now();
+  const entry = createAttempts.get(adminId);
+  if (!entry || now - entry.firstAttempt > RATE_LIMIT_WINDOW_MS) {
+    createAttempts.set(adminId, { count: 1, firstAttempt: now });
+    return false;
+  }
+  entry.count++;
+  return entry.count > MAX_CREATES;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -49,6 +65,14 @@ Deno.serve(async (req) => {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Rate limit check
+    if (isRateLimited(callerId as string)) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const { email, password, fullName, role } = await req.json();
