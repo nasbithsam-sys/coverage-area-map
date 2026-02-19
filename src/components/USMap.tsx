@@ -282,6 +282,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: true,
+      disableClusteringAtZoom: 12,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         let size = "small";
@@ -399,10 +400,32 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ", USA")}&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.001`
       );
-      const results = await res.json();
+      let results = await res.json();
 
+      // Retry without ", USA" suffix if no results
       if (results.length === 0) {
-        toast.error("No locations found", { description: `Could not find "${searchQuery}"` });
+        const retryRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=us&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.001`
+        );
+        results = await retryRes.json();
+      }
+
+      // If still no geocoding results, fall back to nearest techs from map center
+      if (results.length === 0) {
+        const center = leafletMap.current.getCenter();
+        const { results: fallbackResults } = filterTechsBySearch(
+          technicians, "address", center.lat, center.lng, {}, searchQuery
+        );
+        setHasSearchOverlay(true);
+        onSearchResults?.({
+          results: fallbackResults,
+          resultType: "address",
+          query: searchQuery,
+        });
+        if (showPins && fallbackResults.length > 0 && onTechClick) {
+          onTechClick(fallbackResults[0].tech);
+        }
+        toast.info("Location not found exactly", { description: `Showing nearest technicians for "${searchQuery}"` });
         setSearching(false);
         return;
       }

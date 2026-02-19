@@ -344,9 +344,9 @@ export default function Technicians() {
                   />
                 </TableHead>
                 <SortableHead field="name">Name</SortableHead>
+                <TableHead>Number</TableHead>
                 <SortableHead field="city">Location</SortableHead>
                 <TableHead>Specialties</TableHead>
-                <SortableHead field="service_radius_miles">Radius</SortableHead>
                 <SortableHead field="priority">Priority</SortableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-28">Actions</TableHead>
@@ -395,6 +395,7 @@ export default function Technicians() {
                       </div>
                     </div>
                   </TableCell>
+                  <TableCell className="text-muted-foreground">{tech.phone || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{tech.city}, {tech.state}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
@@ -403,7 +404,6 @@ export default function Technicians() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">{tech.service_radius_miles} mi</TableCell>
                   <TableCell>
                     <Badge variant={(PRIORITY_COLORS[tech.priority] || "secondary") as any} className="text-[10px]">
                       {PRIORITY_LABELS[tech.priority] || "Normal"}
