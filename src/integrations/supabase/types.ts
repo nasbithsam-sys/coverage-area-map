@@ -197,6 +197,27 @@ export type Database = {
         }
         Relationships: []
       }
+      zip_centroids: {
+        Row: {
+          created_at: string
+          latitude: number
+          longitude: number
+          zip: string
+        }
+        Insert: {
+          created_at?: string
+          latitude: number
+          longitude: number
+          zip: string
+        }
+        Update: {
+          created_at?: string
+          latitude?: number
+          longitude?: number
+          zip?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
