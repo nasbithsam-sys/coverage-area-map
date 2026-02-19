@@ -337,29 +337,22 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     });
   }, [zones]);
 
-  // Draw tech markers & service radius — respects filteredTechIds
+  // Store current visible techs for radius rendering
+  const activeTechsRef = useRef<Tables<"technicians">[]>([]);
+
+  // Draw tech markers (NO radius here — handled by viewport listener)
   useEffect(() => {
-    if (!clusterRef.current || !radiusRef.current) return;
+    if (!clusterRef.current) return;
     clusterRef.current.clearLayers();
-    radiusRef.current.clearLayers();
+    radiusRef.current?.clearLayers();
 
     let techs = technicians.filter((t) => t.is_active && (t.latitude !== 0 || t.longitude !== 0));
     if (filteredTechIds) {
       techs = techs.filter((t) => filteredTechIds.has(t.id));
     }
+    activeTechsRef.current = techs;
 
     if (showPins) {
-      techs.forEach((tech) => {
-        L.circle([tech.latitude, tech.longitude], {
-          radius: milesToMeters(tech.service_radius_miles),
-          color: "hsl(217, 71%, 45%)",
-          fillColor: "hsl(217, 71%, 45%)",
-          fillOpacity: 0.12,
-          weight: 1,
-          interactive: false,
-        }).addTo(radiusRef.current!);
-      });
-
       techs.forEach((tech) => {
         const marker = L.circleMarker([tech.latitude, tech.longitude], {
           radius: 7,
@@ -384,6 +377,49 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     }
   }, [technicians, showPins, onTechClick, filteredTechIds]);
 
+  // Viewport-based radius rendering: only draw radii for visible techs at zoom >= 10
+  useEffect(() => {
+    const map = leafletMap.current;
+    if (!map || !radiusRef.current) return;
+
+    const MAX_VISIBLE_RADII = 200;
+
+    function renderVisibleRadii() {
+      if (!radiusRef.current || !leafletMap.current) return;
+      radiusRef.current.clearLayers();
+
+      const zoom = leafletMap.current.getZoom();
+      if (zoom < 10 || !showPins) return;
+
+      const bounds = leafletMap.current.getBounds();
+      const visibleTechs = activeTechsRef.current.filter((t) =>
+        bounds.contains([t.latitude, t.longitude])
+      );
+
+      const toRender = visibleTechs.slice(0, MAX_VISIBLE_RADII);
+      toRender.forEach((tech) => {
+        L.circle([tech.latitude, tech.longitude], {
+          radius: milesToMeters(tech.service_radius_miles),
+          color: "hsl(217, 71%, 45%)",
+          fillColor: "hsl(217, 71%, 45%)",
+          fillOpacity: 0.12,
+          weight: 1,
+          interactive: false,
+        }).addTo(radiusRef.current!);
+      });
+    }
+
+    map.on("moveend", renderVisibleRadii);
+    map.on("zoomend", renderVisibleRadii);
+    // Initial render
+    renderVisibleRadii();
+
+    return () => {
+      map.off("moveend", renderVisibleRadii);
+      map.off("zoomend", renderVisibleRadii);
+    };
+  }, [showPins, technicians, filteredTechIds]);
+
   const clearSearchOverlay = useCallback(() => {
     searchLayerRef.current?.clearLayers();
     highlightRef.current?.clearLayers();
@@ -392,25 +428,86 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     onSearchResults?.(null);
   }, [onSearchResults]);
 
+  /** Helper: fetch Nominatim with given params, return parsed JSON */
+  async function nominatimFetch(params: Record<string, string>): Promise<any[]> {
+    const qs = new URLSearchParams({ format: "json", limit: "1", addressdetails: "1", polygon_geojson: "1", polygon_threshold: "0.001", ...params });
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`);
+    return res.json();
+  }
+
+  /** Parse a comma-separated address into structured Nominatim params */
+  function parseStructuredAddress(query: string): Record<string, string> | null {
+    const parts = query.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) return null;
+    const params: Record<string, string> = { countrycodes: "us" };
+    // Last part might be "CO 80127" or "Colorado" or "80127"
+    const lastPart = parts[parts.length - 1];
+    const stateZipMatch = lastPart.match(/^([A-Za-z]{2})\s+(\d{5})$/);
+    if (stateZipMatch) {
+      params.state = stateZipMatch[1];
+      params.postalcode = stateZipMatch[2];
+    } else if (/^\d{5}$/.test(lastPart)) {
+      params.postalcode = lastPart;
+    } else if (lastPart.length === 2) {
+      params.state = lastPart;
+    }
+    // Second-to-last is city (if we have 3+ parts)
+    if (parts.length >= 3) {
+      params.city = parts[parts.length - 2];
+      params.street = parts.slice(0, parts.length - 2).join(", ");
+    } else {
+      // 2 parts: street, city/state
+      params.street = parts[0];
+      if (!params.city) params.city = parts[1];
+    }
+    return params;
+  }
+
   const handleSearch = async () => {
     if (!searchQuery.trim() || !leafletMap.current) return;
     setSearching(true);
 
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ", USA")}&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.001`
-      );
-      let results = await res.json();
+      let results: any[] = [];
 
-      // Retry without ", USA" suffix if no results
+      // Attempt 1: query + ", USA"
+      results = await nominatimFetch({ q: searchQuery + ", USA" });
+
+      // Attempt 2: query with countrycodes=us
       if (results.length === 0) {
-        const retryRes = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=us&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.001`
-        );
-        results = await retryRes.json();
+        results = await nominatimFetch({ q: searchQuery, countrycodes: "us" });
       }
 
-      // If still no geocoding results, fall back to nearest techs from map center
+      // Attempt 3: structured query (parse commas into street/city/state/zip)
+      if (results.length === 0) {
+        const structured = parseStructuredAddress(searchQuery);
+        if (structured) {
+          results = await nominatimFetch(structured);
+        }
+      }
+
+      // Attempt 4: raw query, no suffix, no country filter
+      if (results.length === 0) {
+        results = await nominatimFetch({ q: searchQuery });
+      }
+
+      // Attempt 5: strip street number and retry
+      if (results.length === 0) {
+        const stripped = searchQuery.replace(/^\d+\s+/, "");
+        if (stripped !== searchQuery) {
+          results = await nominatimFetch({ q: stripped, countrycodes: "us" });
+        }
+      }
+
+      // Attempt 6: take first comma-part only (e.g. just the street name)
+      if (results.length === 0) {
+        const firstPart = searchQuery.split(",")[0].trim();
+        if (firstPart !== searchQuery.trim()) {
+          results = await nominatimFetch({ q: firstPart + ", USA" });
+        }
+      }
+
+      // If ALL attempts fail, fall back to nearest techs from map center
       if (results.length === 0) {
         const center = leafletMap.current.getCenter();
         const { results: fallbackResults } = filterTechsBySearch(
