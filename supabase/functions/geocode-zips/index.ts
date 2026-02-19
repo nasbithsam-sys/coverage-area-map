@@ -53,21 +53,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch ZIP centroid dataset from GitHub (MIT licensed)
+    // Fetch ZIP centroid dataset from GitHub (MIT licensed, ~33k entries)
     const res = await fetch(
-      "https://raw.githubusercontent.com/blakek/us-zips/master/lib/geo.json"
+      "https://raw.githubusercontent.com/millbj92/US-Zip-Codes-JSON/master/USCities.json"
     );
     if (!res.ok) {
       throw new Error(`Failed to fetch dataset: ${res.status}`);
     }
 
-    const data: Record<string, { lat: number; lng: number }> = await res.json();
+    const data: { zip_code: number; latitude: number; longitude: number }[] = await res.json();
 
-    // Build rows
-    const rows = Object.entries(data).map(([zip, coords]) => ({
-      zip: zip.padStart(5, "0"),
-      latitude: coords.lat,
-      longitude: coords.lng,
+    // Build rows, pad zip to 5 digits
+    const rows = data.map((entry) => ({
+      zip: String(entry.zip_code).padStart(5, "0"),
+      latitude: entry.latitude,
+      longitude: entry.longitude,
     }));
 
     // Insert in batches of 1000
