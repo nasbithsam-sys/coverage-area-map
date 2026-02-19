@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth check
+    // Auth check - only admins/processors can seed
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -36,72 +36,57 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { zips } = await req.json();
-    if (!Array.isArray(zips) || zips.length === 0) {
-      return new Response(JSON.stringify({ error: "zips array required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Check if already seeded
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-    // Deduplicate and clean
-    const uniqueZips = [...new Set(zips.map((z: string) => String(z).trim().padStart(5, "0")))];
-
-    // Check which ZIPs are already cached
-    const { data: cached } = await supabase
+    const { count } = await adminClient
       .from("zip_centroids")
-      .select("zip, latitude, longitude")
-      .in("zip", uniqueZips);
+      .select("*", { count: "exact", head: true });
 
-    const cachedMap: Record<string, { latitude: number; longitude: number }> = {};
-    (cached || []).forEach((c: any) => {
-      cachedMap[c.zip] = { latitude: c.latitude, longitude: c.longitude };
-    });
-
-    const missing = uniqueZips.filter((z) => !cachedMap[z]);
-
-    // Geocode missing ZIPs via Nominatim (rate-limited, batch in small groups)
-    const newEntries: { zip: string; latitude: number; longitude: number }[] = [];
-
-    for (const zip of missing) {
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?postalcode=${zip}&country=US&format=json&limit=1`,
-          {
-            headers: {
-              "User-Agent": "CoverageMapApp/1.0",
-            },
-          }
-        );
-        const results = await res.json();
-        if (results.length > 0) {
-          const lat = parseFloat(results[0].lat);
-          const lon = parseFloat(results[0].lon);
-          if (lat >= 18 && lat <= 72 && lon >= -180 && lon <= -65) {
-            newEntries.push({ zip, latitude: lat, longitude: lon });
-            cachedMap[zip] = { latitude: lat, longitude: lon };
-          }
-        }
-        // Small delay to respect Nominatim rate limits (1 req/sec)
-        await new Promise((r) => setTimeout(r, 1100));
-      } catch {
-        // Skip failed lookups
-      }
-    }
-
-    // Cache new entries
-    if (newEntries.length > 0) {
-      // Use service role to insert into cache (bypasses RLS)
-      const adminClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    if (count && count > 30000) {
+      return new Response(
+        JSON.stringify({ message: "Already seeded", count }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-      await adminClient.from("zip_centroids").upsert(newEntries, { onConflict: "zip" });
     }
 
-    return new Response(JSON.stringify({ centroids: cachedMap }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Fetch ZIP centroid dataset from GitHub (MIT licensed)
+    const res = await fetch(
+      "https://raw.githubusercontent.com/blakek/us-zips/master/lib/geo.json"
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to fetch dataset: ${res.status}`);
+    }
+
+    const data: Record<string, { lat: number; lng: number }> = await res.json();
+
+    // Build rows
+    const rows = Object.entries(data).map(([zip, coords]) => ({
+      zip: zip.padStart(5, "0"),
+      latitude: coords.lat,
+      longitude: coords.lng,
+    }));
+
+    // Insert in batches of 1000
+    let inserted = 0;
+    for (let i = 0; i < rows.length; i += 1000) {
+      const batch = rows.slice(i, i + 1000);
+      const { error } = await adminClient
+        .from("zip_centroids")
+        .upsert(batch, { onConflict: "zip" });
+      if (error) {
+        throw new Error(`Insert error at batch ${i}: ${error.message}`);
+      }
+      inserted += batch.length;
+    }
+
+    return new Response(
+      JSON.stringify({ message: "Seeded successfully", count: inserted }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
