@@ -90,18 +90,25 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     let latitude: number;
     let longitude: number;
 
-    const coords = guessCoords(city, state);
-    if (coords) {
-      latitude = coords.lat;
-      longitude = coords.lng;
-    } else if (tech?.latitude && tech?.longitude) {
-      // Keep existing coordinates when editing
-      latitude = tech.latitude;
-      longitude = tech.longitude;
+    const manualLat = parseFloat(form.get("latitude") as string);
+    const manualLng = parseFloat(form.get("longitude") as string);
+
+    if (!isNaN(manualLat) && !isNaN(manualLng) && (manualLat !== 0 || manualLng !== 0)) {
+      // Use manually entered coordinates
+      latitude = manualLat;
+      longitude = manualLng;
     } else {
-      // For new techs with unknown city, default to 0,0 (will not show on map)
-      latitude = 0;
-      longitude = 0;
+      const coords = guessCoords(city, state);
+      if (coords) {
+        latitude = coords.lat;
+        longitude = coords.lng;
+      } else if (tech?.latitude && tech?.longitude) {
+        latitude = tech.latitude;
+        longitude = tech.longitude;
+      } else {
+        latitude = 0;
+        longitude = 0;
+      }
     }
 
     const specialtyRaw = form.get("specialty") as string;
@@ -177,6 +184,16 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
         <div className="space-y-2">
           <Label htmlFor="zip">ZIP *</Label>
           <Input id="zip" name="zip" required defaultValue={tech?.zip} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="latitude">Latitude</Label>
+          <Input id="latitude" name="latitude" type="number" step="any" placeholder="e.g. 40.7128" defaultValue={tech?.latitude || ""} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="longitude">Longitude</Label>
+          <Input id="longitude" name="longitude" type="number" step="any" placeholder="e.g. -74.006" defaultValue={tech?.longitude || ""} />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
