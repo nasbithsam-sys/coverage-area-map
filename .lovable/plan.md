@@ -1,72 +1,43 @@
 
+# Fix Radius Circles Appearing in Wrong/Random Locations
 
-# Improve Search Resilience and Map Performance
+## Root Cause
 
-## Two Problems to Fix
+The current code only filters out technicians with exactly `(0, 0)` coordinates:
+```typescript
+techs = technicians.filter((t) => t.is_active && (t.latitude !== 0 || t.longitude !== 0));
+```
 
-### 1. Full address searches fail (e.g. "4662 S Badger Court, Littleton, CO 80127")
+But technicians with other invalid coordinates -- such as coordinates outside the US, swapped lat/lng values, or other garbage data -- still pass through and get markers and radius circles drawn in random locations (other countries, middle of oceans, etc.).
 
-The current retry logic tries:
-1. Query + ", USA" (fails for this address)
-2. Query with `countrycodes=us` (also fails)
-3. Falls back to nearest techs from map center (not useful)
+## Fix
 
-From the network logs, "4662 S Badger Court, USA" (without city/state/zip) actually succeeds. The issue is Nominatim's handling of comma-separated full addresses.
+Add a `isValidUSCoordinate` helper function that validates coordinates are within the continental US bounding box (plus Alaska and Hawaii). Use it everywhere technicians are filtered for rendering.
 
-**Fix:** Add a multi-step retry cascade in `handleSearch`:
-1. Try original query + ", USA" (current)
-2. Try original query with `countrycodes=us` (current)
-3. NEW: Try a "structured" Nominatim query using `street=`, `city=`, `state=`, `postalcode=` parameters by parsing the comma-separated parts
-4. NEW: Try just the raw query without any suffix (no ", USA", no countrycodes filter)
-5. NEW: Try progressively shorter versions - strip the street number, then strip the street entirely
-6. Only after all retries fail, fall back to nearest techs from map center
+US bounds (generous):
+- Latitude: 18 to 72 (covers Hawaii ~20 and Alaska ~72)
+- Longitude: -180 to -65 (covers Alaska's Aleutian Islands crossing -180 and eastern US)
 
-This ensures virtually any address format resolves to a location.
+Also validate that `service_radius_miles` is a positive, reasonable number (e.g., > 0 and < 500) before drawing a radius circle, to prevent absurdly large circles.
 
-### 2. Map sluggish with 6000+ technicians
+## Changes (single file: `src/components/USMap.tsx`)
 
-Currently every active tech gets:
-- An `L.circle` for service radius (added to `radiusRef` layer group - NOT clustered)
-- An `L.circleMarker` for the pin (added to cluster group)
+1. **Add helper function** `isValidUSCoordinate(lat, lng)` that returns true only if coordinates fall within valid US bounds.
 
-With 6000 techs, that means ~6000 unclustered radius circles always rendering, which is extremely heavy.
+2. **Update tech filtering** (around line 349): Replace the `(t.latitude !== 0 || t.longitude !== 0)` check with `isValidUSCoordinate(t.latitude, t.longitude)`.
 
-**Fix:** Only render service radius circles for techs visible at the current zoom/bounds:
-- Remove the bulk radius rendering from the main `useEffect`
-- Add a `moveend`/`zoomend` event listener on the map that renders radius circles only for techs currently in the viewport AND only when zoom level >= 10 (when radii are actually meaningful to see)
-- Cap visible radius circles to a reasonable limit (e.g. 200 max) to prevent lag when panned over dense areas
-- This keeps the clustered markers performant while still showing radii when zoomed in
+3. **Update radius rendering** (around line 400): Add a guard so radius circles are only drawn when `tech.service_radius_miles > 0 && tech.service_radius_miles < 500`.
 
-## Files to Change
-
-**`src/components/USMap.tsx`** - both fixes in this single file
+4. **Update `filterTechsBySearch`** (line 132): Use the same `isValidUSCoordinate` check instead of the `!== 0` check.
 
 ## Technical Details
 
-### Search retry cascade (handleSearch)
-
-```text
-Attempt 1: query + ", USA"
-Attempt 2: query + countrycodes=us  
-Attempt 3: structured query (parse commas into street/city/state/zip params)
-Attempt 4: raw query (no modifications)
-Attempt 5: remove street number, retry
-Attempt 6: fall back to nearest techs from map center
+```typescript
+function isValidUSCoordinate(lat: number, lng: number): boolean {
+  if (lat === 0 && lng === 0) return false;
+  // Continental US + Hawaii + Alaska (generous bounds)
+  return lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65;
+}
 ```
 
-The structured query parsing will handle inputs like "4662 S Badger Court, Littleton, CO 80127" by splitting on commas and mapping parts to Nominatim's `street`, `city`, `state`, `postalcode` parameters.
-
-### Performance: viewport-based radius rendering
-
-```text
-Current flow:
-  technicians change -> draw ALL 6000 radius circles + ALL 6000 markers
-
-New flow:  
-  technicians change -> draw ALL markers into cluster group (clusters handle perf)
-  map moveend/zoomend -> if zoom >= 10, draw radius circles for visible techs only (max 200)
-  map zoom < 10 -> clear all radius circles (too small to see anyway)
-```
-
-This reduces the number of rendered radius circles from 6000 to typically 10-50 at any given time, dramatically improving pan/zoom performance.
-
+This single validation function applied in 3 places will eliminate all radius circles and markers appearing outside the US.
