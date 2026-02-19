@@ -1,97 +1,86 @@
 
 
-# Fix All Issues: Performance, Radius, New Tech Badge
+# Fix Search, Table Columns, and Cluster Zoom Behavior
 
-## Issues Found
+## 3 Issues to Address
 
-### 1. 6000+ Technicians Will Break the App (Critical)
-Both Dashboard and Technicians pages fetch data with `supabase.from("technicians").select("*").order("name")` -- the database has a **default limit of 1000 rows**. With 6000+ techs, only the first 1000 will load. The table also renders all rows at once, which will cause UI lag.
+### 1. Search should always return results (never "Nothing detected")
 
-**Fix:**
-- Add `.limit(10000)` to both fetch queries in `Dashboard.tsx` and `Technicians.tsx` to bypass the 1000-row default.
-- Add client-side pagination (50 rows per page) to the Technicians table to prevent DOM overload.
+**Problem:** When users search for a street address, neighborhood, zip code, city, or state, the search sometimes shows "No locations found" because Nominatim doesn't return a match for the exact query format.
 
-### 2. Tech Radius Not Showing on Map
-The radius circles are drawn with `fillOpacity: 0.06` and `weight: 0.5` -- they are nearly invisible at most zoom levels.
+**Fix:** Improve the search to be more resilient:
+- Try the original query first, then retry with cleaned-up variations (e.g. strip "USA" suffix, try with just the raw query) if the first attempt returns no results.
+- For the `filterTechsBySearch` function: when the result type is "unknown" or no exact matches are found, always fall back to the nearest 10 technicians instead of showing nothing.
+- Also handle cases where `detectResultType` returns "unknown" by treating it as an address-style search (nearest 10 techs).
 
-**Fix:**
-- Increase `fillOpacity` from `0.06` to `0.12` and `weight` from `0.5` to `1` in `USMap.tsx` (line 352-359) so radius circles are actually visible.
+**File:** `src/components/USMap.tsx`
+- In `handleSearch`: add a retry with alternative query formats when `results.length === 0`.
+- In `filterTechsBySearch`: ensure the `"unknown"` case returns nearest 10 (already does, but make explicit).
+- Change the error toast to be softer and still show nearest techs even when geocoding partially fails.
 
-### 3. Editable "New Tech" Badge
-Currently `is_new` is set automatically to `true` for manually added techs and cannot be changed. The user wants a dropdown in the form.
+### 2. Technicians table columns should be: Name, Number, Location, Specialties, Priority, Status, Actions
 
-**Fix:**
-- Add an "is_new" dropdown to `TechForm.tsx` with two options: "New Tech" (true, default for new records) and "-" (false).
-- Include `is_new` in the form payload so it gets saved on create and update.
+**Problem:** The current column order is: Name, Location, Specialties, Radius, Priority, Status, Actions. The user wants "Number" (phone) shown and "Radius" removed.
 
-### 4. New Tech Priority in Search Results
-This is **already implemented** in `filterTechsBySearch()` (USMap.tsx lines 138-143). Techs with `is_new=true` are sorted to the top before distance sorting. No changes needed here.
+**Fix:** In the Technicians page table:
+- Remove the "Radius" column.
+- Add a "Number" (phone) column after "Name".
+- Column order becomes: Checkbox, Name, Number, Location, Specialties, Priority, Status, Actions.
+
+**File:** `src/pages/Technicians.tsx`
+- Remove the `SortableHead` for `service_radius_miles` and its corresponding `TableCell`.
+- Add a `TableHead` for "Number" after the Name column.
+- Add a `TableCell` showing `tech.phone || "-"` in the corresponding position.
+
+### 3. Clusters should split into individual markers with visible radius when zooming in
+
+**Problem:** The marker cluster group uses `maxClusterRadius: 50` which can keep techs clustered even at high zoom levels, preventing users from seeing individual tech radii clearly.
+
+**Fix:** Adjust the `MarkerClusterGroup` settings so clusters break apart at closer zoom levels:
+- Set `disableClusteringAtZoom: 12` so that at zoom level 12 and above, all markers are shown individually with their service radius circles visible.
+- Keep `spiderfyOnMaxZoom: true` as a safety net.
+
+**File:** `src/components/USMap.tsx`
+- Add `disableClusteringAtZoom: 12` to the `L.markerClusterGroup()` config (around line 280).
 
 ---
 
 ## Technical Details
 
-### File: `src/pages/Dashboard.tsx` (line 26)
-```typescript
-// Before
-const { data } = await supabase.from("technicians").select("*").order("name");
+### USMap.tsx - Search improvements (handleSearch function)
 
-// After
-const { data } = await supabase.from("technicians").select("*").order("name").limit(10000);
+Add retry logic when Nominatim returns 0 results:
+```typescript
+// If no results with ", USA" suffix, retry without it
+if (results.length === 0) {
+  const retryRes = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=us&limit=1&addressdetails=1&polygon_geojson=1&polygon_threshold=0.001`
+  );
+  results = await retryRes.json();
+}
 ```
 
-### File: `src/pages/Technicians.tsx` (line 42)
-```typescript
-// Before
-const { data } = await supabase.from("technicians").select("*").order("name");
+Also ensure that even when geocoding fails completely, we show nearest techs by distance from map center rather than showing nothing.
 
-// After
-const { data } = await supabase.from("technicians").select("*").order("name").limit(10000);
+### USMap.tsx - Cluster config
+
+```typescript
+L.markerClusterGroup({
+  maxClusterRadius: 50,
+  spiderfyOnMaxZoom: true,
+  showCoverageOnHover: false,
+  zoomToBoundsOnClick: true,
+  disableClusteringAtZoom: 12,  // NEW: show individual markers at zoom 12+
+  // ... iconCreateFunction stays the same
+});
 ```
 
-Also add pagination state and controls:
-- `page` state starting at 1, `PAGE_SIZE = 50`
-- Slice `filtered` array to show only current page
-- Add Previous/Next buttons and page indicator below the table
-- Reset page to 1 when search or specialty filter changes
+### Technicians.tsx - Column changes
 
-### File: `src/components/USMap.tsx` (lines 352-359)
-```typescript
-// Before
-fillOpacity: 0.06,
-weight: 0.5,
-
-// After
-fillOpacity: 0.12,
-weight: 1,
+Remove the Radius column and add Number column:
+```
+Header row: [Checkbox] [Name] [Number] [Location] [Specialties] [Priority] [Status] [Actions]
 ```
 
-### File: `src/components/TechForm.tsx`
-Add `isNew` state and dropdown:
-```typescript
-const [isNew, setIsNew] = useState<string>(tech ? (tech.is_new ? "yes" : "no") : "yes");
-```
-
-Add to the form grid (next to the Priority dropdown):
-```typescript
-<div className="space-y-2">
-  <Label>New Tech</Label>
-  <Select value={isNew} onValueChange={setIsNew}>
-    <SelectTrigger>
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="yes">New Tech</SelectItem>
-      <SelectItem value="no">-</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
-```
-
-Include in payload:
-```typescript
-is_new: isNew === "yes",
-```
-
-Remove the hardcoded `payload.is_new = true` for new records since the dropdown handles it.
+The Number cell will display the technician's phone number or a dash if empty.
 
