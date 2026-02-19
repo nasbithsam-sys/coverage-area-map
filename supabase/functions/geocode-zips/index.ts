@@ -61,14 +61,20 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch dataset: ${res.status}`);
     }
 
-    const data: { zip_code: number; latitude: number; longitude: number }[] = await res.json();
+    const data: { zip_code: number; latitude: any; longitude: any }[] = await res.json();
 
-    // Build rows, pad zip to 5 digits
-    const rows = data.map((entry) => ({
-      zip: String(entry.zip_code).padStart(5, "0"),
-      latitude: entry.latitude,
-      longitude: entry.longitude,
-    }));
+    // Build rows, filter out entries with missing/invalid coordinates
+    const rows = data
+      .filter((entry) => {
+        const lat = Number(entry.latitude);
+        const lng = Number(entry.longitude);
+        return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+      })
+      .map((entry) => ({
+        zip: String(entry.zip_code).padStart(5, "0"),
+        latitude: Number(entry.latitude),
+        longitude: Number(entry.longitude),
+      }));
 
     // Insert in batches of 1000
     let inserted = 0;
