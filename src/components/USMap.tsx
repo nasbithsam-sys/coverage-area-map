@@ -268,7 +268,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       zoom: 5,
       minZoom: 4,
       maxZoom: 20,
-      zoomControl: true,
+      zoomControl: false,
     });
 
     const initialTile = L.tileLayer(TILE_LAYERS.street.url, {

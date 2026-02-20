@@ -120,7 +120,7 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 size="icon"
-                className="absolute top-2 right-8 z-20 h-9 w-9 bg-card/90 backdrop-blur-sm shadow-lg border-border/80 hover:bg-card hover:shadow-xl transition-all duration-200"
+                className="absolute top-2 right-8 z-20 h-9 w-9 bg-card shadow-md border border-border hover:bg-accent hover:text-accent-foreground transition-all duration-200"
                 onClick={() => {
                   setSidebarOpen((o) => !o);
                   setTimeout(() => mapRef.current?.invalidateSize(), 350);
