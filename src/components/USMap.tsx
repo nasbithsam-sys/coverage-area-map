@@ -388,7 +388,13 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     const map = leafletMap.current;
     if (!map || !radiusRef.current) return;
 
-    const MAX_VISIBLE_RADII = 200;
+    function getMaxRadii(zoom: number): number {
+      if (zoom >= 14) return 200;
+      if (zoom >= 12) return 100;
+      if (zoom >= 10) return 50;
+      if (zoom >= 8) return 20;
+      return 10;
+    }
 
     function renderVisibleRadii() {
       if (!radiusRef.current || !leafletMap.current) return;
@@ -396,12 +402,15 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
 
       if (!showPins) return;
 
+      const zoom = leafletMap.current.getZoom();
+      const maxRadii = getMaxRadii(zoom);
+
       const bounds = leafletMap.current.getBounds();
       const visibleTechs = activeTechsRef.current.filter((t) =>
         bounds.contains([t.latitude, t.longitude])
       );
 
-      const toRender = visibleTechs.slice(0, MAX_VISIBLE_RADII);
+      const toRender = visibleTechs.slice(0, maxRadii);
       toRender.forEach((tech) => {
         if (!(tech.service_radius_miles > 0 && tech.service_radius_miles < 500)) return;
         L.circle([tech.latitude, tech.longitude], {
