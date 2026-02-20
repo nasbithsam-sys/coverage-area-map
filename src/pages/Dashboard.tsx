@@ -73,8 +73,8 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col md:flex-row h-[calc(100vh-56px)] md:h-screen">
-        <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex flex-col md:flex-row h-[calc(100vh-56px)] md:h-screen relative">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Header + Stats */}
           <div className="p-4 md:px-6 md:pt-6 md:pb-4 space-y-4 shrink-0">
             <motion.div
@@ -114,23 +114,7 @@ export default function Dashboard() {
           </div>
 
           {/* Map — fills remaining height */}
-          <div className="flex-1 px-4 md:px-6 pb-4 md:pb-6 min-h-0 relative">
-            {/* Sidebar toggle button — OUTSIDE map, always visible */}
-            {canShowSidebar && !isMobile && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="absolute top-2 right-8 z-20 h-9 w-9 bg-card shadow-md border border-border hover:bg-accent hover:text-accent-foreground transition-all duration-200"
-                onClick={() => {
-                  setSidebarOpen((o) => !o);
-                  setTimeout(() => mapRef.current?.invalidateSize(), 350);
-                }}
-                aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-              >
-                {sidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-              </Button>
-            )}
-
+          <div className="flex-1 px-4 md:px-6 pb-4 md:pb-6 min-h-0">
             {loading ? (
               <div className="flex items-center justify-center h-full map-container bg-card">
                 <div className="flex flex-col items-center gap-3">
@@ -158,6 +142,26 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Sidebar toggle button — floats at the junction of map and sidebar */}
+        {canShowSidebar && !isMobile && (
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 z-30"
+            style={{ right: sidebarOpen ? 320 : 0, transition: "right 0.3s ease-in-out" }}
+          >
+            <Button
+              variant="default"
+              size="icon"
+              className="h-10 w-6 rounded-l-md rounded-r-none shadow-lg"
+              onClick={() => {
+                setSidebarOpen((o) => !o);
+                setTimeout(() => mapRef.current?.invalidateSize(), 350);
+              }}
+              aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            >
+              {sidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+            </Button>
+          </div>
+        )}
 
         {/* Tech sidebar */}
         {canShowSidebar && !isMobile && (
