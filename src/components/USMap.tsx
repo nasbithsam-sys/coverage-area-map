@@ -383,10 +383,13 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     }
   }, [technicians, showPins, onTechClick, filteredTechIds]);
 
-  // Viewport-based radius rendering: only draw radii for visible techs at zoom >= 10
+  // Viewport-based radius rendering with debounce to prevent flicker during pan/zoom
   useEffect(() => {
     const map = leafletMap.current;
     if (!map || !radiusRef.current) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let isZooming = false;
 
     function getMaxRadii(zoom: number): number {
       if (zoom >= 14) return 200;
@@ -398,6 +401,9 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
 
     function renderVisibleRadii() {
       if (!radiusRef.current || !leafletMap.current) return;
+      // Don't clear during active zoom animation — wait for it to settle
+      if (isZooming) return;
+
       radiusRef.current.clearLayers();
 
       if (!showPins) return;
@@ -424,14 +430,29 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       });
     }
 
-    map.on("moveend", renderVisibleRadii);
-    map.on("zoomend", renderVisibleRadii);
+    function debouncedRender() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(renderVisibleRadii, 80);
+    }
+
+    function onZoomStart() { isZooming = true; }
+    function onZoomEnd() {
+      isZooming = false;
+      debouncedRender();
+    }
+
+    map.on("zoomstart", onZoomStart);
+    map.on("zoomend", onZoomEnd);
+    map.on("moveend", debouncedRender);
+
     // Initial render
     renderVisibleRadii();
 
     return () => {
-      map.off("moveend", renderVisibleRadii);
-      map.off("zoomend", renderVisibleRadii);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      map.off("zoomstart", onZoomStart);
+      map.off("zoomend", onZoomEnd);
+      map.off("moveend", debouncedRender);
     };
   }, [showPins, technicians, filteredTechIds]);
 
