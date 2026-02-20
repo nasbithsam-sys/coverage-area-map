@@ -45,6 +45,7 @@ export default function Technicians() {
   const [editingTech, setEditingTech] = useState<Tables<"technicians"> | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [specialtyFilter, setSpecialtyFilter] = useState<string[]>([]);
+  const [newTechFilter, setNewTechFilter] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,10 @@ export default function Technicians() {
       query = query.overlaps("specialty", specialtyFilter);
     }
 
+    if (newTechFilter) {
+      query = query.eq("is_new", true);
+    }
+
     const { data, count, error } = await query;
     if (error) {
       console.error("Fetch error:", error.message);
@@ -104,7 +109,7 @@ export default function Technicians() {
     setTechnicians(data || []);
     setTotalCount(count ?? 0);
     setLoading(false);
-  }, [page, debouncedSearch, specialtyFilter, sortField, sortDir]);
+  }, [page, debouncedSearch, specialtyFilter, newTechFilter, sortField, sortDir]);
 
   useEffect(() => { fetchTechs(); }, [fetchTechs]);
 
@@ -272,26 +277,36 @@ export default function Technicians() {
               className="pl-9 rounded-xl bg-muted/30 border-border/50 focus:bg-card transition-colors"
             />
           </div>
-          {allSpecialties.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 items-center">
-              <span className="text-xs text-muted-foreground font-medium mr-1">Specialties:</span>
-              {allSpecialties.map((s) => (
-                <Badge
-                  key={s}
-                  variant={specialtyFilter.includes(s) ? "default" : "outline"}
-                  className="cursor-pointer text-xs select-none transition-all duration-200 hover:scale-105"
-                  onClick={() => toggleSpecialty(s)}
-                >
-                  {s}
-                </Badge>
-              ))}
-              {specialtyFilter.length > 0 && (
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setSpecialtyFilter([]); setPage(1); }}>
+          <div className="flex flex-wrap gap-1.5 items-center">
+              <Badge
+                variant={newTechFilter ? "default" : "outline"}
+                className="cursor-pointer text-xs select-none transition-all duration-200 hover:scale-105 bg-accent/80 hover:bg-accent border-accent/50"
+                onClick={() => { setNewTechFilter((v) => !v); setPage(1); }}
+              >
+                🆕 New Tech
+              </Badge>
+              {allSpecialties.length > 0 && (
+                <>
+                  <span className="text-xs text-muted-foreground font-medium mx-1">|</span>
+                  <span className="text-xs text-muted-foreground font-medium mr-1">Specialties:</span>
+                  {allSpecialties.map((s) => (
+                    <Badge
+                      key={s}
+                      variant={specialtyFilter.includes(s) ? "default" : "outline"}
+                      className="cursor-pointer text-xs select-none transition-all duration-200 hover:scale-105"
+                      onClick={() => toggleSpecialty(s)}
+                    >
+                      {s}
+                    </Badge>
+                  ))}
+                </>
+              )}
+              {(specialtyFilter.length > 0 || newTechFilter) && (
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setSpecialtyFilter([]); setNewTechFilter(false); setPage(1); }}>
                   <X className="h-3 w-3 mr-1" /> Clear
                 </Button>
               )}
             </div>
-          )}
         </div>
 
         {/* Bulk action bar */}
