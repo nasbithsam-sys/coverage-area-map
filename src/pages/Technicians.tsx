@@ -280,7 +280,7 @@ export default function Technicians() {
           <div className="flex flex-wrap gap-1.5 items-center">
               <Badge
                 variant={newTechFilter ? "default" : "outline"}
-                className="cursor-pointer text-xs select-none transition-all duration-200 hover:scale-105 bg-accent/80 hover:bg-accent border-accent/50"
+                className="cursor-pointer text-xs select-none transition-all duration-200 hover:scale-105"
                 onClick={() => { setNewTechFilter((v) => !v); setPage(1); }}
               >
                 🆕 New Tech
