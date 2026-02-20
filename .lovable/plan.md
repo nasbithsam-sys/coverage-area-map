@@ -1,43 +1,69 @@
 
-# Fix Radius Circles Appearing in Wrong/Random Locations
 
-## Root Cause
+## Plan: New Tech Filter, Specialty-Grouped Sidebar, and New Tech Priority
 
-The current code only filters out technicians with exactly `(0, 0)` coordinates:
-```typescript
-techs = technicians.filter((t) => t.is_active && (t.latitude !== 0 || t.longitude !== 0));
+### 1. Add "New Tech" Tag Filter on the Technicians Page
+
+On `src/pages/Technicians.tsx`, add a toggle filter badge for "New Tech" alongside the existing specialty filters.
+
+- Add a `newTechFilter` state (`boolean | null` -- null = no filter, true = only new, false = only non-new)
+- Render a "New Tech" badge in the filter bar that toggles on/off
+- Pass the filter to the Supabase query: `.eq("is_new", true)` when active
+- Reset page to 1 when toggled
+
+### 2. Group Search Results by Specialty in the Sidebar
+
+On `src/components/TechSidebar.tsx`, restructure the search results mode to display technicians grouped by specialty:
+
+- Sort results so **New Tech** tagged technicians always appear first (in a dedicated "New Technicians" group at the top)
+- Then group remaining technicians by their specialties (e.g., "Handyman", "Plumber", etc.)
+- Each group gets a heading with the specialty name and count
+- Techs with multiple specialties appear under each relevant group
+- Techs with no specialty go into an "Other" group at the bottom
+- Within each group, techs are sorted by distance (nearest first)
+
+The layout will look like:
+
+```text
++----------------------------------+
+| NEW TECHNICIANS (2)              |
+|   Tech A - 45.2 mi              |
+|   Tech B - 120.0 mi             |
++----------------------------------+
+| HANDYMAN (3)                     |
+|   Tech C - 5.1 mi               |
+|   Tech D - 12.3 mi              |
+|   Tech E - 30.0 mi              |
++----------------------------------+
+| PLUMBER (2)                      |
+|   Tech F - 8.4 mi               |
+|   Tech G - 22.1 mi              |
++----------------------------------+
+| OTHER (1)                        |
+|   Tech H - 15.0 mi              |
++----------------------------------+
 ```
 
-But technicians with other invalid coordinates -- such as coordinates outside the US, swapped lat/lng values, or other garbage data -- still pass through and get markers and radius circles drawn in random locations (other countries, middle of oceans, etc.).
+Each tech entry retains the existing accordion expand for contact details, distance badge, and locate-on-map button.
 
-## Fix
+### 3. New Techs Always Show on Top (Regardless of Distance)
 
-Add a `isValidUSCoordinate` helper function that validates coordinates are within the continental US bounding box (plus Alaska and Hawaii). Use it everywhere technicians are filtered for rendering.
+The search sorting in `src/components/USMap.tsx` (`filterTechsBySearch`) already prioritizes `is_new` techs first (lines 144-149). This is working correctly. The improvement here is in the **sidebar display** (point 2 above) -- by having a dedicated "New Technicians" group at the very top, these techs will always be visually prominent even if they are 1000+ miles away.
 
-US bounds (generous):
-- Latitude: 18 to 72 (covers Hawaii ~20 and Alaska ~72)
-- Longitude: -180 to -65 (covers Alaska's Aleutian Islands crossing -180 and eastern US)
+No change needed in the search/sort logic itself since `is_new` already sorts first.
 
-Also validate that `service_radius_miles` is a positive, reasonable number (e.g., > 0 and < 500) before drawing a radius circle, to prevent absurdly large circles.
+---
 
-## Changes (single file: `src/components/USMap.tsx`)
+### Technical Details
 
-1. **Add helper function** `isValidUSCoordinate(lat, lng)` that returns true only if coordinates fall within valid US bounds.
+**Files to modify:**
 
-2. **Update tech filtering** (around line 349): Replace the `(t.latitude !== 0 || t.longitude !== 0)` check with `isValidUSCoordinate(t.latitude, t.longitude)`.
+1. **`src/pages/Technicians.tsx`**
+   - Add `newTechFilter` state (boolean or null)
+   - Add filter badge in the filter bar section (line ~276)
+   - Add `.eq("is_new", true)` to query when filter is active (line ~96)
 
-3. **Update radius rendering** (around line 400): Add a guard so radius circles are only drawn when `tech.service_radius_miles > 0 && tech.service_radius_miles < 500`.
-
-4. **Update `filterTechsBySearch`** (line 132): Use the same `isValidUSCoordinate` check instead of the `!== 0` check.
-
-## Technical Details
-
-```typescript
-function isValidUSCoordinate(lat: number, lng: number): boolean {
-  if (lat === 0 && lng === 0) return false;
-  // Continental US + Hawaii + Alaska (generous bounds)
-  return lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65;
-}
-```
-
-This single validation function applied in 3 places will eliminate all radius circles and markers appearing outside the US.
+2. **`src/components/TechSidebar.tsx`**
+   - In the search results mode (lines 124-244), replace the flat list with grouped sections
+   - Add a `useMemo` to compute groups: first "New Technicians", then each specialty alphabetically, then "Other"
+   - Render each group with a section heading and its techs using the existing accordion pattern
