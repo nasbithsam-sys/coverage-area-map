@@ -394,8 +394,7 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
       if (!radiusRef.current || !leafletMap.current) return;
       radiusRef.current.clearLayers();
 
-      const zoom = leafletMap.current.getZoom();
-      if (zoom < 10 || !showPins) return;
+      if (!showPins) return;
 
       const bounds = leafletMap.current.getBounds();
       const visibleTechs = activeTechsRef.current.filter((t) =>
