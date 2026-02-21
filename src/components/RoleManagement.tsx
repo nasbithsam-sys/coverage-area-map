@@ -37,6 +37,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
   const [newFullName, setNewFullName] = useState("");
   const [newRole, setNewRole] = useState<AppRole>("processor");
   const [creating, setCreating] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [totpDialog, setTotpDialog] = useState<{ open: boolean; uri: string; secret: string } | null>(null);
 
   // Delete user state
@@ -47,6 +48,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
   const [passwordDialog, setPasswordDialog] = useState<{ open: boolean; userId: string; name: string } | null>(null);
   const [changePassword, setChangePassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const callManageUser = async (body: Record<string, string>) => {
     const res = await fetch(
@@ -223,7 +225,12 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
             </div>
             <div className="space-y-2">
               <Label>Password</Label>
-              <Input placeholder="Set password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <div className="relative">
+                <Input placeholder="Set password" type={showNewPassword ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="pr-10" />
+                <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full w-10" onClick={() => setShowNewPassword(p => !p)}>
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Role</Label>
@@ -318,8 +325,8 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
                     )}
                   </TableCell>
                   <TableCell>
-                    {u.user_id !== user?.id ? (
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      {u.user_id !== user?.id ? (
                         <Select value={u.role} onValueChange={(v) => changeRole(u.user_id, v as AppRole)}>
                           <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -328,15 +335,19 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="Change Password"
-                          onClick={() => setPasswordDialog({ open: true, userId: u.user_id, name: u.profile?.full_name || u.profile?.email || "User" })}
-                        >
-                          <KeyRound className="h-4 w-4" />
-                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">You</span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Change Password"
+                        onClick={() => setPasswordDialog({ open: true, userId: u.user_id, name: u.profile?.full_name || u.profile?.email || "User" })}
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      {u.user_id !== user?.id && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -346,10 +357,8 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">You</span>
-                    )}
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -413,7 +422,7 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
       </Dialog>
 
       {/* Change Password Dialog */}
-      <Dialog open={passwordDialog?.open || false} onOpenChange={(open) => { if (!open) { setPasswordDialog(null); setChangePassword(""); } }}>
+      <Dialog open={passwordDialog?.open || false} onOpenChange={(open) => { if (!open) { setPasswordDialog(null); setChangePassword(""); setShowChangePassword(false); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Change Password</DialogTitle>
@@ -424,17 +433,23 @@ export default function RoleManagement({ users, onRefresh }: RoleManagementProps
           <div className="space-y-3">
             <div className="space-y-2">
               <Label>New Password</Label>
-              <Input
-                type="password"
-                placeholder="Min 6 characters"
-                value={changePassword}
-                onChange={(e) => setChangePassword(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  type={showChangePassword ? "text" : "password"}
+                  placeholder="Min 8 characters"
+                  value={changePassword}
+                  onChange={(e) => setChangePassword(e.target.value)}
+                  className="pr-10"
+                />
+                <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full w-10" onClick={() => setShowChangePassword(p => !p)}>
+                  {showChangePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => { setPasswordDialog(null); setChangePassword(""); }}>Cancel</Button>
-            <Button onClick={handleChangePassword} disabled={changingPassword || changePassword.length < 6}>
+            <Button onClick={handleChangePassword} disabled={changingPassword || changePassword.length < 8}>
               {changingPassword ? "Updating..." : "Update Password"}
             </Button>
           </DialogFooter>
