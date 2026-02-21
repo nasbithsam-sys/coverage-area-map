@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -84,9 +84,13 @@ export default function TechImport({ onImported, technicians, role }: Props) {
 
       if (isExcel) {
         const ab = await file.arrayBuffer();
-        const wb = XLSX.read(ab, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(ab);
+        const ws = wb.worksheets[0];
+        const rows: string[][] = [];
+        ws.eachRow((row) => {
+          rows.push((row.values as any[]).slice(1).map((v) => String(v ?? "")));
+        });
         const filtered = rows.filter((r) => r.some((c) => String(c).trim()));
         if (filtered.length === 0) {
           toast({ title: "Empty spreadsheet", variant: "destructive" });
