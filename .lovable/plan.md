@@ -1,42 +1,43 @@
 
+## Fix Duplicate Phone Number Detection
 
-## Replace `xlsx` with `exceljs` to Fix Security Vulnerability
+### Problem
+The current duplicate check fetches only 100 technicians and compares client-side. With more than 100 records, duplicates are missed entirely. There's also no database-level enforcement.
 
-The `xlsx` (SheetJS) package has two high-severity vulnerabilities and its fixes are behind a paid license. We'll switch to `exceljs`, a fully free and actively maintained alternative.
+### Solution (Two Layers)
 
-### What Changes
+**1. Database: Add a unique index on normalized phone numbers**
+- Create a unique index on the `phone` column in the `technicians` table
+- This guarantees no duplicates can ever be inserted, regardless of client bugs
+- The index will only apply to non-null phone values
 
-**1. Swap the dependency**
-- Remove `xlsx` from `package.json`
-- Add `exceljs` (latest version)
+**2. Fix the client-side check in `TechForm.tsx`**
+- Instead of fetching 100 records and filtering in JavaScript, query directly for the specific phone number using `.eq("phone", formattedPhone)`
+- This is faster, simpler, and works regardless of table size
+- Keep the real-time warning UI and submit blocking as-is
 
-**2. Update `src/components/TechImport.tsx`**
-- Replace `import * as XLSX from "xlsx"` with `import ExcelJS from "exceljs"`
-- Update the Excel parsing block:
-  - Use `new ExcelJS.Workbook()` and `workbook.xlsx.load(arrayBuffer)` to read the file
-  - Iterate over the first worksheet's rows using `worksheet.eachRow()` to build the same `string[][]` format
-  - The rest of the import logic (CSV parsing, duplicate detection, ZIP lookup, etc.) stays identical
+### Technical Details
 
-### Technical Detail
-
-```
-// Before (xlsx)
-const wb = XLSX.read(ab, { type: "array" });
-const ws = wb.Sheets[wb.SheetNames[0]];
-const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-
-// After (exceljs)
-const wb = new ExcelJS.Workbook();
-await wb.xlsx.load(ab);
-const ws = wb.worksheets[0];
-const rows: string[][] = [];
-ws.eachRow((row) => {
-  rows.push(row.values.slice(1).map(v => String(v ?? "")));
-});
+**Database migration:**
+```sql
+CREATE UNIQUE INDEX unique_technician_phone 
+ON public.technicians (phone) 
+WHERE phone IS NOT NULL;
 ```
 
-### Impact
-- Resolves both the Prototype Pollution and ReDoS security findings
-- No change to user-facing behavior -- CSV, TSV, XLS, and XLSX imports all continue working identically
-- Only one file modified (`TechImport.tsx`) plus the dependency swap
+**TechForm.tsx change (duplicate check useEffect):**
+Replace the current logic that fetches 100 rows and filters client-side with a direct query:
+```typescript
+const { data } = await supabase
+  .from("technicians")
+  .select("id, name, phone")
+  .eq("phone", formatPhone(phoneValue))
+  .neq("id", tech?.id ?? "00000000-0000-0000-0000-000000000000")
+  .limit(1);
+```
 
+Also add a fallback error handler in `handleSubmit` to catch the unique constraint violation and show a friendly message if somehow the client check is bypassed.
+
+### Files Changed
+- Database migration (new unique index)
+- `src/components/TechForm.tsx` (fix query + add constraint error handling)
