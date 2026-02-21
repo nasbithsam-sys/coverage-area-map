@@ -117,6 +117,10 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (duplicateWarning) {
+      toast({ title: "Duplicate phone number", description: "A technician with this phone number already exists. Please use a different number.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     const form = new FormData(e.currentTarget);
 
@@ -292,7 +296,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
         <Label htmlFor="notes">Notes</Label>
         <Textarea id="notes" name="notes" rows={2} defaultValue={tech?.notes || ""} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full" disabled={loading || !!duplicateWarning}>
         {loading ? "Saving..." : tech ? "Update Technician" : "Add Technician"}
       </Button>
     </form>
