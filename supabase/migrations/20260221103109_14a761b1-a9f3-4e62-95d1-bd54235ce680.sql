@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX unique_technician_phone ON public.technicians (phone) WHERE phone IS NOT NULL;
