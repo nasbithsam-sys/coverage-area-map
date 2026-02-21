@@ -97,15 +97,13 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
       const { data } = await supabase
         .from("technicians")
         .select("id, name, phone")
-        .neq("id", tech?.id ?? "")
-        .limit(100);
-      if (data) {
-        const match = data.find((t) => t.phone && stripPhone(t.phone) === digits);
-        if (match) {
-          setDuplicateWarning(`Phone number already exists: ${match.name} (${formatPhone(match.phone!)})`);
-        } else {
-          setDuplicateWarning(null);
-        }
+        .eq("phone", formatted)
+        .neq("id", tech?.id ?? "00000000-0000-0000-0000-000000000000")
+        .limit(1);
+      if (data && data.length > 0) {
+        setDuplicateWarning(`Phone number already exists: ${data[0].name} (${formatPhone(data[0].phone!)})`);
+      } else {
+        setDuplicateWarning(null);
       }
     }, 400);
     return () => clearTimeout(timer);
@@ -185,8 +183,8 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     if (tech) {
       const { error } = await supabase.from("technicians").update(payload).eq("id", tech.id);
       if (error) {
-        toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
-      } else {
+        const msg = error.code === "23505" ? "A technician with this phone number already exists." : getSafeErrorMessage(error);
+        toast({ title: "Duplicate phone number", description: msg, variant: "destructive" });
         await logActivity("edited", "technician", tech.id, { name: payload.name, changes: "updated details" });
         toast({ title: "Technician updated" });
         onSaved();
@@ -194,7 +192,8 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     } else {
       const { data, error } = await supabase.from("technicians").insert(payload).select().single();
       if (error) {
-        toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
+        const msg = error.code === "23505" ? "A technician with this phone number already exists." : getSafeErrorMessage(error);
+        toast({ title: "Duplicate phone number", description: msg, variant: "destructive" });
       } else {
         await logActivity("added", "technician", data.id, { name: payload.name });
         toast({ title: "Technician added" });
