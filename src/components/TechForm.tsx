@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,6 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
+import { formatPhoneInput, stripPhone, formatPhone } from "@/lib/phoneUtils";
+import { correctCitySpelling, correctStateSpelling } from "@/lib/locationUtils";
 import type { Tables } from "@/integrations/supabase/types";
 
 // Common US city coordinates for quick lookup
@@ -78,14 +82,50 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
   const [loading, setLoading] = useState(false);
   const [priority, setPriority] = useState<string>((tech as any)?.priority || "normal");
   const [isNew, setIsNew] = useState<string>(tech ? (tech.is_new ? "yes" : "no") : "yes");
+  const [phoneValue, setPhoneValue] = useState(tech?.phone ? formatPhone(tech.phone) : "");
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
+  // Check for duplicate phone number
+  useEffect(() => {
+    const digits = stripPhone(phoneValue);
+    if (digits.length !== 10) {
+      setDuplicateWarning(null);
+      return;
+    }
+    const formatted = formatPhone(phoneValue);
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from("technicians")
+        .select("id, name, phone")
+        .neq("id", tech?.id ?? "")
+        .limit(100);
+      if (data) {
+        const match = data.find((t) => t.phone && stripPhone(t.phone) === digits);
+        if (match) {
+          setDuplicateWarning(`Phone number already exists: ${match.name} (${formatPhone(match.phone!)})`);
+        } else {
+          setDuplicateWarning(null);
+        }
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [phoneValue, tech?.id]);
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhoneValue(formatPhoneInput(e.target.value));
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     const form = new FormData(e.currentTarget);
 
-    const city = form.get("city") as string;
-    const state = form.get("state") as string;
+    let city = (form.get("city") as string).trim();
+    let state = (form.get("state") as string).trim().toUpperCase();
+
+    // Auto-correct city and state spelling
+    city = correctCitySpelling(city);
+    state = correctStateSpelling(state);
 
     let latitude: number;
     let longitude: number;
@@ -94,7 +134,6 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     const manualLng = parseFloat(form.get("longitude") as string);
 
     if (!isNaN(manualLat) && !isNaN(manualLng) && (manualLat !== 0 || manualLng !== 0)) {
-      // Use manually entered coordinates
       latitude = manualLat;
       longitude = manualLng;
     } else {
@@ -114,13 +153,18 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
     const specialtyRaw = form.get("specialty") as string;
     const specialty = specialtyRaw ? specialtyRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
+    // Format phone to standard format
+    const rawPhone = phoneValue;
+    const phoneDigits = stripPhone(rawPhone);
+    const formattedPhone = phoneDigits.length === 10 ? formatPhone(rawPhone) : rawPhone || null;
+
     const payload: any = {
       name: form.get("name") as string,
-      phone: form.get("phone") as string || null,
+      phone: formattedPhone,
       email: form.get("email") as string || null,
       specialty,
       city,
-      state: state.toUpperCase(),
+      state,
       zip: form.get("zip") as string,
       latitude,
       longitude,
@@ -165,9 +209,22 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" name="phone" defaultValue={tech?.phone || ""} />
+          <Input
+            id="phone"
+            name="phone"
+            value={phoneValue}
+            onChange={handlePhoneChange}
+            placeholder="(555) 123-4567"
+            maxLength={14}
+          />
         </div>
       </div>
+      {duplicateWarning && (
+        <Alert variant="destructive" className="py-2">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-sm">{duplicateWarning}</AlertDescription>
+        </Alert>
+      )}
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input id="email" name="email" type="email" defaultValue={tech?.email || ""} />

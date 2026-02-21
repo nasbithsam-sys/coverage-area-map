@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 import { Search, X, ChevronDown } from "lucide-react";
+import { correctCitySpelling, correctStateSpelling } from "@/lib/locationUtils";
 
 interface CoverageZone {
   id: string;
@@ -503,20 +504,33 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
     if (!searchQuery.trim() || !leafletMap.current) return;
     setSearching(true);
 
+    // Auto-correct spelling before searching
+    const correctedQuery = searchQuery.split(",").map((part, i) => {
+      const trimmed = part.trim();
+      if (i === 0) return correctCitySpelling(trimmed);
+      if (trimmed.length <= 3) return correctStateSpelling(trimmed);
+      return trimmed;
+    }).join(", ");
+
+    const queryToUse = correctedQuery || searchQuery;
+    if (correctedQuery !== searchQuery) {
+      setSearchQuery(correctedQuery);
+    }
+
     try {
       let results: any[] = [];
 
       // Attempt 1: query + ", USA"
-      results = await nominatimFetch({ q: searchQuery + ", USA" });
+      results = await nominatimFetch({ q: queryToUse + ", USA" });
 
       // Attempt 2: query with countrycodes=us
       if (results.length === 0) {
-        results = await nominatimFetch({ q: searchQuery, countrycodes: "us" });
+        results = await nominatimFetch({ q: queryToUse, countrycodes: "us" });
       }
 
       // Attempt 3: structured query (parse commas into street/city/state/zip)
       if (results.length === 0) {
-        const structured = parseStructuredAddress(searchQuery);
+        const structured = parseStructuredAddress(queryToUse);
         if (structured) {
           results = await nominatimFetch(structured);
         }
@@ -524,21 +538,21 @@ const USMap = forwardRef<USMapHandle, USMapProps>(function USMap(
 
       // Attempt 4: raw query, no suffix, no country filter
       if (results.length === 0) {
-        results = await nominatimFetch({ q: searchQuery });
+        results = await nominatimFetch({ q: queryToUse });
       }
 
       // Attempt 5: strip street number and retry
       if (results.length === 0) {
-        const stripped = searchQuery.replace(/^\d+\s+/, "");
-        if (stripped !== searchQuery) {
+        const stripped = queryToUse.replace(/^\d+\s+/, "");
+        if (stripped !== queryToUse) {
           results = await nominatimFetch({ q: stripped, countrycodes: "us" });
         }
       }
 
       // Attempt 6: take first comma-part only (e.g. just the street name)
       if (results.length === 0) {
-        const firstPart = searchQuery.split(",")[0].trim();
-        if (firstPart !== searchQuery.trim()) {
+        const firstPart = queryToUse.split(",")[0].trim();
+        if (firstPart !== queryToUse.trim()) {
           results = await nominatimFetch({ q: firstPart + ", USA" });
         }
       }
