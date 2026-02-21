@@ -1,28 +1,42 @@
 
-## Delete All Sample Technician Data
 
-This will permanently remove all records from the `technicians` table. No schema changes are needed — this is purely a data cleanup.
+## Replace `xlsx` with `exceljs` to Fix Security Vulnerability
 
-### What will be deleted
-- All rows in the `technicians` table (the 500 sample/test records)
-- No table structure, columns, or settings are changed
-- No other tables are affected (activity logs remain intact)
+The `xlsx` (SheetJS) package has two high-severity vulnerabilities and its fixes are behind a paid license. We'll switch to `exceljs`, a fully free and actively maintained alternative.
 
-### What will NOT be deleted
-- The `technicians` table itself (structure stays)
-- ZIP centroid data
-- Coverage zones
-- User accounts and roles
+### What Changes
 
-### Technical Details
-A single SQL statement will be executed against the database:
-```sql
-DELETE FROM public.technicians;
+**1. Swap the dependency**
+- Remove `xlsx` from `package.json`
+- Add `exceljs` (latest version)
+
+**2. Update `src/components/TechImport.tsx`**
+- Replace `import * as XLSX from "xlsx"` with `import ExcelJS from "exceljs"`
+- Update the Excel parsing block:
+  - Use `new ExcelJS.Workbook()` and `workbook.xlsx.load(arrayBuffer)` to read the file
+  - Iterate over the first worksheet's rows using `worksheet.eachRow()` to build the same `string[][]` format
+  - The rest of the import logic (CSV parsing, duplicate detection, ZIP lookup, etc.) stays identical
+
+### Technical Detail
+
+```
+// Before (xlsx)
+const wb = XLSX.read(ab, { type: "array" });
+const ws = wb.Sheets[wb.SheetNames[0]];
+const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+// After (exceljs)
+const wb = new ExcelJS.Workbook();
+await wb.xlsx.load(ab);
+const ws = wb.worksheets[0];
+const rows: string[][] = [];
+ws.eachRow((row) => {
+  rows.push(row.values.slice(1).map(v => String(v ?? "")));
+});
 ```
 
-This runs with the service role, bypassing RLS, so all rows will be removed regardless of who created them.
+### Impact
+- Resolves both the Prototype Pollution and ReDoS security findings
+- No change to user-facing behavior -- CSV, TSV, XLS, and XLSX imports all continue working identically
+- Only one file modified (`TechImport.tsx`) plus the dependency swap
 
-### After Deletion
-- The Technicians page will show "No technicians found"
-- The Coverage Map (Dashboard) will show 0 techs and an empty map
-- You can immediately start adding real technician data via the Add Technician form or CSV import
