@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import * as XLSX from "xlsx";
 import { getSafeErrorMessage } from "@/lib/safeError";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -76,14 +77,34 @@ export default function TechImport({ onImported, technicians, role }: Props) {
     setImportStatus("Parsing file...");
 
     try {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      const isExcel = /\.xlsx?$/i.test(file.name);
+      let dataLines: string[][] = [];
 
-      const firstLine = lines[0].toLowerCase();
-      const isTSV = firstLine.includes("\t");
-      const delimiter = isTSV ? "\t" : ",";
-      const hasHeader = firstLine.includes("name") && (firstLine.includes("city") || firstLine.includes("state"));
-      const dataLines = hasHeader ? lines.slice(1) : lines;
+      if (isExcel) {
+        const ab = await file.arrayBuffer();
+        const wb = XLSX.read(ab, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        const filtered = rows.filter((r) => r.some((c) => String(c).trim()));
+        if (filtered.length === 0) {
+          toast({ title: "Empty spreadsheet", variant: "destructive" });
+          setImporting(false);
+          setImportStatus("");
+          return;
+        }
+        const firstRow = filtered[0].map((c) => String(c).toLowerCase());
+        const hasHeader = firstRow.includes("name") && (firstRow.includes("city") || firstRow.includes("state"));
+        dataLines = (hasHeader ? filtered.slice(1) : filtered).map((r) => r.map((c) => String(c)));
+      } else {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter((l) => l.trim());
+        const firstLine = lines[0].toLowerCase();
+        const isTSV = firstLine.includes("\t");
+        const delimiter = isTSV ? "\t" : ",";
+        const hasHeader = firstLine.includes("name") && (firstLine.includes("city") || firstLine.includes("state"));
+        const rawLines = hasHeader ? lines.slice(1) : lines;
+        dataLines = rawLines.map((line) => parseCSVLine(line, delimiter));
+      }
 
       // Parse all rows
       const parsed: {
@@ -94,8 +115,7 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         priority: string; notes: string | null;
       }[] = [];
 
-      for (const line of dataLines) {
-        const cols = parseCSVLine(line, delimiter);
+      for (const cols of dataLines) {
         if (cols.length < 5) continue;
         const name = cols[0]?.trim();
         const city = cols[3]?.trim();
@@ -231,7 +251,7 @@ export default function TechImport({ onImported, technicians, role }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" className="hidden" onChange={handleFile} />
+      <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls" className="hidden" onChange={handleFile} />
       <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
         <Upload className="h-4 w-4 mr-1.5" />
         {importing ? "Importing..." : "Import"}
