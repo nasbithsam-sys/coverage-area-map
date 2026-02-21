@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, Download, Database } from "lucide-react";
+import { formatPhone, stripPhone } from "@/lib/phoneUtils";
+import { correctCitySpelling, correctStateSpelling } from "@/lib/locationUtils";
 import type { Tables } from "@/integrations/supabase/types";
 
 interface Props {
@@ -118,13 +120,18 @@ export default function TechImport({ onImported, technicians, role }: Props) {
       for (const cols of dataLines) {
         if (cols.length < 5) continue;
         const name = cols[0]?.trim();
-        const city = cols[3]?.trim();
-        const state = cols[4]?.trim().toUpperCase();
+        const city = correctCitySpelling(cols[3]?.trim() || "");
+        const state = correctStateSpelling(cols[4]?.trim() || "");
         if (!name || !city || !state) continue;
+
+        // Format phone number
+        const rawPhone = cols[1]?.trim() || "";
+        const phoneDigits = stripPhone(rawPhone);
+        const phone = phoneDigits.length === 10 ? formatPhone(rawPhone) : rawPhone || null;
 
         parsed.push({
           name,
-          phone: cols[1]?.trim() || null,
+          phone,
           email: cols[2]?.trim() || null,
           city, state,
           zip: cols[5]?.trim() || "00000",
@@ -142,6 +149,34 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         setImporting(false);
         setImportStatus("");
         return;
+      }
+
+      // Check for duplicate phone numbers against existing technicians
+      const importPhones = parsed.filter(r => r.phone).map(r => stripPhone(r.phone!)).filter(d => d.length === 10);
+      if (importPhones.length > 0) {
+        setImportStatus("Checking for duplicate phone numbers...");
+        const { data: existingTechs } = await supabase
+          .from("technicians")
+          .select("id, name, phone")
+          .not("phone", "is", null);
+        if (existingTechs) {
+          const existingPhones = new Map<string, string>();
+          for (const t of existingTechs) {
+            if (t.phone) {
+              existingPhones.set(stripPhone(t.phone), t.name);
+            }
+          }
+          const dupes = parsed.filter(r => r.phone && existingPhones.has(stripPhone(r.phone)));
+          if (dupes.length > 0) {
+            const dupeNames = dupes.slice(0, 5).map(d => `${d.name} (${d.phone})`).join(", ");
+            const more = dupes.length > 5 ? ` and ${dupes.length - 5} more` : "";
+            toast({
+              title: `${dupes.length} duplicate phone number(s) found`,
+              description: `Already exist: ${dupeNames}${more}. They will still be imported.`,
+              variant: "destructive",
+            });
+          }
+        }
       }
 
       // Collect ZIPs that need centroid lookup
