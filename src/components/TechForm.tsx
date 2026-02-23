@@ -131,6 +131,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
 
     let latitude: number;
     let longitude: number;
+    let zipValue = (form.get("zip") as string).trim();
 
     const manualLat = parseFloat(form.get("latitude") as string);
     const manualLng = parseFloat(form.get("longitude") as string);
@@ -144,16 +145,19 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
         latitude = coords.lat;
         longitude = coords.lng;
       } else {
-        // Try city_centroids table as fallback
+        // Try city_centroids table as fallback (also grab zip)
         const { data: cityData } = await supabase
           .from("city_centroids")
-          .select("latitude, longitude")
+          .select("latitude, longitude, zip")
           .ilike("city", city)
           .eq("state", state)
           .limit(1);
         if (cityData && cityData.length > 0) {
           latitude = cityData[0].latitude;
           longitude = cityData[0].longitude;
+          if (!zipValue && cityData[0].zip) {
+            zipValue = cityData[0].zip;
+          }
         } else if (tech?.latitude && tech?.longitude) {
           latitude = tech.latitude;
           longitude = tech.longitude;
@@ -162,6 +166,25 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
           longitude = 0;
         }
       }
+    }
+
+    // If still no zip, try zip from city_centroids separately
+    if (!zipValue) {
+      const { data: cityZip } = await supabase
+        .from("city_centroids")
+        .select("zip")
+        .ilike("city", city)
+        .eq("state", state)
+        .limit(1);
+      if (cityZip && cityZip.length > 0 && cityZip[0].zip) {
+        zipValue = cityZip[0].zip;
+      }
+    }
+
+    if (!zipValue) {
+      toast({ title: "ZIP code required", description: "Could not determine ZIP code for this city. Please enter it manually.", variant: "destructive" });
+      setLoading(false);
+      return;
     }
 
     const specialtyRaw = form.get("specialty") as string;
@@ -179,7 +202,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
       specialty,
       city,
       state,
-      zip: form.get("zip") as string,
+      zip: zipValue,
       latitude,
       longitude,
       service_radius_miles: parseInt(form.get("radius") as string) || 25,
@@ -255,8 +278,8 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
           <Input id="state" name="state" required maxLength={2} placeholder="TX" defaultValue={tech?.state} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="zip">ZIP *</Label>
-          <Input id="zip" name="zip" required defaultValue={tech?.zip} />
+         <Label htmlFor="zip">ZIP</Label>
+          <Input id="zip" name="zip" placeholder="Auto from city" defaultValue={tech?.zip} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
