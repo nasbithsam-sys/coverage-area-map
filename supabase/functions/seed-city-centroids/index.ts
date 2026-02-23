@@ -60,11 +60,11 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch dataset: ${res.status}`);
     }
 
-    const data: { city: string; state: string; latitude: any; longitude: any }[] = await res.json();
+    const data: { city: string; state: string; zip_code: number; latitude: any; longitude: any }[] = await res.json();
 
     // Build unique city+state rows, picking first valid coordinate per city
     const seen = new Set<string>();
-    const rows: { city: string; state: string; latitude: number; longitude: number }[] = [];
+    const rows: { city: string; state: string; latitude: number; longitude: number; zip: string }[] = [];
 
     for (const entry of data) {
       const lat = Number(entry.latitude);
@@ -78,8 +78,9 @@ Deno.serve(async (req) => {
 
       if (seen.has(key)) continue;
       seen.add(key);
+      const zip = String(entry.zip_code).padStart(5, "0");
 
-      rows.push({ city, state, latitude: lat, longitude: lng });
+      rows.push({ city, state, latitude: lat, longitude: lng, zip });
     }
 
     // Insert in batches of 1000
