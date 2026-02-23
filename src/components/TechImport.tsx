@@ -260,24 +260,23 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         }
       }
 
-      let cityCentroidMap: Record<string, { latitude: number; longitude: number }> = {};
+      let cityCentroidMap: Record<string, { latitude: number; longitude: number; zip: string | null }> = {};
       if (needsCityLookup.size > 0) {
         setImportStatus(`Looking up ${needsCityLookup.size} city centroids...`);
         const cityPairs = [...needsCityLookup].map(k => { const [c, s] = k.split("|"); return { city: c, state: s }; });
         
-        // Query in batches
         for (let i = 0; i < cityPairs.length; i += 100) {
           const batch = cityPairs.slice(i, i + 100);
           for (const pair of batch) {
             const { data } = await supabase
               .from("city_centroids")
-              .select("city, state, latitude, longitude")
+              .select("city, state, latitude, longitude, zip")
               .ilike("city", pair.city)
               .eq("state", pair.state)
               .limit(1);
             if (data && data.length > 0) {
               const key = `${pair.city}|${pair.state}`;
-              cityCentroidMap[key] = { latitude: data[0].latitude, longitude: data[0].longitude };
+              cityCentroidMap[key] = { latitude: data[0].latitude, longitude: data[0].longitude, zip: data[0].zip };
             }
           }
         }
@@ -305,6 +304,9 @@ export default function TechImport({ onImported, technicians, role }: Props) {
             if (cityCentroid) {
               lat = cityCentroid.latitude;
               lng = cityCentroid.longitude;
+              if (cityCentroid.zip && (!row.zip || row.zip === "00000")) {
+                row.zip = cityCentroid.zip;
+              }
             } else {
               lat = 0;
               lng = 0;
@@ -377,7 +379,7 @@ export default function TechImport({ onImported, technicians, role }: Props) {
           </Button>
           <Button variant="outline" size="sm" onClick={seedCityCentroids} disabled={seedingCities}>
             <Database className="h-4 w-4 mr-1.5" />
-            {seedingCities ? "Loading Cities..." : "Seed Cities"}
+            {seedingCities ? "Loading..." : "Seed City ZIPs"}
           </Button>
         </>
       )}

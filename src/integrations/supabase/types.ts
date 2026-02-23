@@ -51,6 +51,7 @@ export type Database = {
           latitude: number
           longitude: number
           state: string
+          zip: string | null
         }
         Insert: {
           city: string
@@ -58,6 +59,7 @@ export type Database = {
           latitude: number
           longitude: number
           state: string
+          zip?: string | null
         }
         Update: {
           city?: string
@@ -65,6 +67,7 @@ export type Database = {
           latitude?: number
           longitude?: number
           state?: string
+          zip?: string | null
         }
         Relationships: []
       }
