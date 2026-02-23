@@ -143,12 +143,24 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
       if (coords) {
         latitude = coords.lat;
         longitude = coords.lng;
-      } else if (tech?.latitude && tech?.longitude) {
-        latitude = tech.latitude;
-        longitude = tech.longitude;
       } else {
-        latitude = 0;
-        longitude = 0;
+        // Try city_centroids table as fallback
+        const { data: cityData } = await supabase
+          .from("city_centroids")
+          .select("latitude, longitude")
+          .ilike("city", city)
+          .eq("state", state)
+          .limit(1);
+        if (cityData && cityData.length > 0) {
+          latitude = cityData[0].latitude;
+          longitude = cityData[0].longitude;
+        } else if (tech?.latitude && tech?.longitude) {
+          latitude = tech.latitude;
+          longitude = tech.longitude;
+        } else {
+          latitude = 0;
+          longitude = 0;
+        }
       }
     }
 

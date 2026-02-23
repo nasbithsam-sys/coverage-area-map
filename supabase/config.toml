@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.geocode-zips]
 verify_jwt = false
+
+[functions.seed-city-centroids]
+verify_jwt = false
