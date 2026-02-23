@@ -143,9 +143,6 @@ export default function Technicians() {
       .update({ is_active: !tech.is_active })
       .eq("id", tech.id);
     if (!error) {
-      await logActivity(tech.is_active ? "deactivated" : "activated", "technician", tech.id, {
-        name: tech.name,
-      });
       fetchTechs();
     }
   };
@@ -155,7 +152,6 @@ export default function Technicians() {
     if (error) {
       toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } else {
-      await logActivity("deleted", "technician", tech.id, { name: tech.name });
       toast({ title: "Technician removed" });
       fetchTechs();
     }
@@ -182,16 +178,6 @@ export default function Technicians() {
     setBulkDeleteOpen(false);
   };
 
-  const logActivity = async (action: string, entity: string, entityId: string, details: Record<string, unknown>) => {
-    if (!user) return;
-    await supabase.from("activity_log").insert([{
-      user_id: user.id,
-      action_type: action,
-      entity_type: entity,
-      entity_id: entityId,
-      details: details as unknown as import("@/integrations/supabase/types").Json,
-    }]);
-  };
 
   const handleSaved = () => {
     setDialogOpen(false);
@@ -258,7 +244,7 @@ export default function Technicians() {
                 <TechForm
                   tech={editingTech}
                   onSaved={handleSaved}
-                  logActivity={logActivity}
+                  
                 />
               </DialogContent>
             </Dialog>

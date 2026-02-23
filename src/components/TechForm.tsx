@@ -73,10 +73,9 @@ function guessCoords(city: string, state: string) {
 interface Props {
   tech?: Tables<"technicians"> | null;
   onSaved: () => void;
-  logActivity: (action: string, entity: string, entityId: string, details: Record<string, unknown>) => Promise<void>;
 }
 
-export default function TechForm({ tech, onSaved, logActivity }: Props) {
+export default function TechForm({ tech, onSaved }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -185,7 +184,7 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
       if (error) {
         const msg = error.code === "23505" ? "A technician with this phone number already exists." : getSafeErrorMessage(error);
         toast({ title: "Duplicate phone number", description: msg, variant: "destructive" });
-        await logActivity("edited", "technician", tech.id, { name: payload.name, changes: "updated details" });
+      } else {
         toast({ title: "Technician updated" });
         onSaved();
       }
@@ -195,7 +194,6 @@ export default function TechForm({ tech, onSaved, logActivity }: Props) {
         const msg = error.code === "23505" ? "A technician with this phone number already exists." : getSafeErrorMessage(error);
         toast({ title: "Duplicate phone number", description: msg, variant: "destructive" });
       } else {
-        await logActivity("added", "technician", data.id, { name: payload.name });
         toast({ title: "Technician added" });
         onSaved();
       }
