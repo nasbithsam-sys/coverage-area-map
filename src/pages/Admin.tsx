@@ -5,7 +5,10 @@ import CoverageZoneManager from "@/components/CoverageZoneManager";
 import RoleManagement from "@/components/RoleManagement";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { format } from "date-fns";
 import type { Tables, Database } from "@/integrations/supabase/types";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -21,6 +24,7 @@ const CHART_COLORS = ["hsl(217, 71%, 45%)", "hsl(150, 60%, 40%)", "hsl(43, 96%, 
 export default function Admin() {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [technicians, setTechnicians] = useState<Tables<"technicians">[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -38,6 +42,26 @@ export default function Admin() {
 
     const { data: techData } = await supabase.from("technicians").select("*");
     setTechnicians(techData || []);
+
+    const { data: logData } = await supabase
+      .from("activity_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    // Fetch profile info for log user_ids
+    const userIds = [...new Set((logData || []).map(l => l.user_id))];
+    const { data: profilesForLogs } = userIds.length
+      ? await supabase.from("profiles").select("user_id, full_name, email").in("user_id", userIds)
+      : { data: [] };
+    const logProfileMap = new Map((profilesForLogs || []).map(p => [p.user_id, p]));
+
+    setActivities(
+      (logData || []).map(l => ({
+        ...l,
+        profile: logProfileMap.get(l.user_id) || null,
+      }))
+    );
   };
 
   const techsByState = Object.entries(
@@ -67,6 +91,7 @@ export default function Admin() {
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="coverage">Coverage Zones</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
+            <TabsTrigger value="activity">Activity Log</TabsTrigger>
           </TabsList>
 
           {/* Analytics */}
@@ -110,6 +135,41 @@ export default function Admin() {
           {/* Role Management */}
           <TabsContent value="roles" className="space-y-4">
             <RoleManagement users={users} onRefresh={fetchAll} />
+          </TabsContent>
+
+          {/* Activity Log */}
+          <TabsContent value="activity" className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle>Activity Log</CardTitle></CardHeader>
+              <CardContent>
+                {activities.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No activity recorded yet.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Timestamp</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Entity</TableHead>
+                        <TableHead>Details</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activities.map((a) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="whitespace-nowrap">{format(new Date(a.created_at), "MMM d, yyyy h:mm a")}</TableCell>
+                          <TableCell>{a.profile?.full_name || a.profile?.email || a.user_id}</TableCell>
+                          <TableCell><Badge variant="secondary">{a.action_type}</Badge></TableCell>
+                          <TableCell>{a.entity_type}</TableCell>
+                          <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{a.details ? JSON.stringify(a.details) : "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
