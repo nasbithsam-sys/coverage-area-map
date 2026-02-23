@@ -26,6 +26,8 @@ export default function TechImport({ onImported, technicians, role }: Props) {
   const [importStatus, setImportStatus] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [seedingCities, setSeedingCities] = useState(false);
+
   // Seed ZIP centroids table from static dataset
   const seedZipCentroids = async () => {
     setSeeding(true);
@@ -42,6 +44,25 @@ export default function TechImport({ onImported, technicians, role }: Props) {
       toast({ title: "Seed error", description: err.message, variant: "destructive" });
     } finally {
       setSeeding(false);
+    }
+  };
+
+  // Seed city centroids table
+  const seedCityCentroids = async () => {
+    setSeedingCities(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("seed-city-centroids", {
+        body: {},
+      });
+      if (error) {
+        toast({ title: "Seed error", description: getSafeErrorMessage(error), variant: "destructive" });
+      } else {
+        toast({ title: "City centroids loaded", description: `${data?.count ?? 0} cities ready` });
+      }
+    } catch (err: any) {
+      toast({ title: "Seed error", description: err.message, variant: "destructive" });
+    } finally {
+      setSeedingCities(false);
     }
   };
 
@@ -224,6 +245,44 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         }
       }
 
+      // City centroid fallback for records still without coordinates
+      const needsCityLookup: Set<string> = new Set();
+      for (const row of parsed) {
+        const lat = parseFloat(row.rawLat);
+        const lng = parseFloat(row.rawLng);
+        const hasValid = !isNaN(lat) && !isNaN(lng) && !(lat === 0 && lng === 0) &&
+          lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65;
+        if (!hasValid) {
+          const zipCentroid = centroidMap[row.zip.padStart(5, "0")];
+          if (!zipCentroid && row.city && row.state) {
+            needsCityLookup.add(`${row.city.toLowerCase()}|${row.state.toUpperCase()}`);
+          }
+        }
+      }
+
+      let cityCentroidMap: Record<string, { latitude: number; longitude: number }> = {};
+      if (needsCityLookup.size > 0) {
+        setImportStatus(`Looking up ${needsCityLookup.size} city centroids...`);
+        const cityPairs = [...needsCityLookup].map(k => { const [c, s] = k.split("|"); return { city: c, state: s }; });
+        
+        // Query in batches
+        for (let i = 0; i < cityPairs.length; i += 100) {
+          const batch = cityPairs.slice(i, i + 100);
+          for (const pair of batch) {
+            const { data } = await supabase
+              .from("city_centroids")
+              .select("city, state, latitude, longitude")
+              .ilike("city", pair.city)
+              .eq("state", pair.state)
+              .limit(1);
+            if (data && data.length > 0) {
+              const key = `${pair.city}|${pair.state}`;
+              cityCentroidMap[key] = { latitude: data[0].latitude, longitude: data[0].longitude };
+            }
+          }
+        }
+      }
+
       // Build final records
       setImportStatus(`Inserting ${parsed.length} technicians...`);
       const records: any[] = [];
@@ -240,8 +299,16 @@ export default function TechImport({ onImported, technicians, role }: Props) {
             lat = centroid.latitude;
             lng = centroid.longitude;
           } else {
-            lat = 0;
-            lng = 0;
+            // Try city centroid fallback
+            const cityKey = `${row.city.toLowerCase()}|${row.state.toUpperCase()}`;
+            const cityCentroid = cityCentroidMap[cityKey];
+            if (cityCentroid) {
+              lat = cityCentroid.latitude;
+              lng = cityCentroid.longitude;
+            } else {
+              lat = 0;
+              lng = 0;
+            }
           }
         }
 
@@ -307,6 +374,10 @@ export default function TechImport({ onImported, technicians, role }: Props) {
           <Button variant="outline" size="sm" onClick={seedZipCentroids} disabled={seeding}>
             <Database className="h-4 w-4 mr-1.5" />
             {seeding ? "Loading ZIPs..." : "Seed ZIPs"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={seedCityCentroids} disabled={seedingCities}>
+            <Database className="h-4 w-4 mr-1.5" />
+            {seedingCities ? "Loading Cities..." : "Seed Cities"}
           </Button>
         </>
       )}

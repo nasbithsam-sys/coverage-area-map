@@ -44,6 +44,30 @@ export type Database = {
         }
         Relationships: []
       }
+      city_centroids: {
+        Row: {
+          city: string
+          created_at: string
+          latitude: number
+          longitude: number
+          state: string
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          latitude: number
+          longitude: number
+          state: string
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          latitude?: number
+          longitude?: number
+          state?: string
+        }
+        Relationships: []
+      }
       coverage_zones: {
         Row: {
           color_level: string
