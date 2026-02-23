@@ -1,67 +1,67 @@
 
 
-## Add City Centroid Fallback for Missing Coordinates
+## Import Report: Track Skipped Technicians and Reasons
 
 ### Problem
-Currently, when importing technicians without coordinates, the system only looks up the ZIP centroid. If the ZIP is missing or not found, the technician gets coordinates (0, 0) and won't appear on the map.
+Currently, when importing technicians, if there are issues (duplicate phone numbers, invalid data, missing cities, etc.), the entire batch fails silently or with a generic error. You have no way to know which specific technicians were skipped and why.
 
 ### Solution
-Add a **city centroids** table as a second fallback. The lookup order becomes:
+Add a **detailed import report** that validates each row individually before inserting, categorizes issues, and shows a downloadable report of all skipped records with reasons.
 
-1. Use provided lat/lng if valid
-2. Look up ZIP centroid from `zip_centroids` table
-3. **NEW**: Look up city+state centroid from `city_centroids` table
-4. Fall back to (0, 0) only if all above fail
+### How It Will Work
 
-### Changes
+1. **Pre-validation phase** -- Before inserting anything, each row gets validated individually:
+   - **Duplicate phone in file**: Two rows in the same file share a phone number
+   - **Duplicate phone in database**: Phone already exists in the system
+   - **Invalid phone**: Phone has wrong number of digits (not 10)
+   - **Missing required fields**: Name, city, or state is blank
+   - **No coordinates found**: City/state not in database, no ZIP match
+   - **Too few columns**: Row has fewer than 5 columns
 
-**1. New database table: `city_centroids`**
-- Columns: `city` (text), `state` (text, 2-letter), `latitude`, `longitude`, `created_at`
-- Primary key on `(city, state)` composite
-- RLS: authenticated users can read, admin/processor can insert
-- Approximately 30,000 US cities
+2. **Insert one-by-one for problem rows** -- Instead of batch-inserting everything and failing on the first error, records with potential issues (like duplicate phones) will be flagged but valid records will still be inserted.
 
-**2. New edge function: `seed-city-centroids`**
-- Fetches a public US cities dataset (same source as ZIP seeder — the dataset already contains city/state/lat/lng)
-- Upserts into `city_centroids` in batches
-- Skips if already seeded (same pattern as `geocode-zips`)
+3. **Import Results Dialog** -- After import, a dialog/modal pops up showing:
+   - Total rows in file
+   - Successfully imported count
+   - Skipped count with breakdown by reason
+   - A table listing each skipped technician: row number, name, phone, and the reason
 
-**3. Update `TechImport.tsx`**
-- After ZIP centroid lookup, collect any remaining technicians still without coordinates
-- Batch-query `city_centroids` by (city, state) pairs
-- Apply city centroid as fallback before defaulting to (0, 0)
-- Add a "Seed Cities" button next to "Seed ZIPs" (admin only)
-
-**4. Update `TechForm.tsx`**
-- When manually adding a technician without coordinates, also check city centroids as fallback after the existing `guessCoords` map
+4. **Download Skipped Report** -- A button to download a CSV of just the skipped/failed rows so you can fix and re-import them.
 
 ### Technical Details
 
-```text
-Coordinate Resolution Order (Import):
+**File: `src/components/TechImport.tsx`**
 
-  Has lat/lng in file?
-       |
-      YES --> use it
-       |
-      NO
-       |
-  Has ZIP in zip_centroids?
-       |
-      YES --> use ZIP centroid
-       |
-      NO
-       |
-  Has city+state in city_centroids?  <-- NEW
-       |
-      YES --> use city centroid
-       |
-      NO --> (0, 0)
-```
+- Add a `skipped` array that collects `{ row, name, phone, reason }` for each problematic record
+- Validate rows before building the insert batch:
+  - Check for duplicate phones within the file itself
+  - Check for duplicate phones against existing database records
+  - Flag invalid phone formats (not 10 digits after stripping)
+  - Flag rows missing name/city/state
+  - Flag rows where no coordinates could be resolved
+- Insert valid records in batches; for rows that fail due to DB constraints (e.g., unique phone violation), catch the error, insert individually, and log failures
+- After import, show an import report dialog
 
-**Database migration SQL:**
-- Creates `city_centroids` table with composite unique constraint on (city, state)
-- Adds RLS policies matching the same pattern as `zip_centroids`
+**New file: `src/components/ImportReport.tsx`**
 
-**Edge function** reuses the same GitHub dataset (`USCities.json`) which already has city and state fields, so no additional data source is needed.
+- A dialog component that displays:
+  - Summary stats (total, imported, skipped)
+  - Scrollable table of skipped rows with columns: Row #, Name, Phone, City/State, Reason
+  - "Download Skipped" button that exports the skipped rows as a CSV for easy fixing and re-import
+
+**Validation rules applied per row:**
+
+| Check | Reason shown |
+|-------|-------------|
+| Fewer than 5 columns | "Row too short" |
+| Missing name | "Missing name" |
+| Missing city or state | "Missing city/state" |
+| Phone not 10 digits | "Invalid phone (X digits)" |
+| Same phone as another row in file | "Duplicate phone in file" |
+| Same phone as existing tech in DB | "Duplicate phone in database" |
+| No coordinates resolved | "No coordinates found" |
+
+**Insert strategy change:**
+- Currently: batch insert of 500, entire batch fails if one row has a constraint violation
+- New: batch insert, but if a batch fails with a unique constraint error, fall back to inserting rows one-by-one in that batch, catching and logging each individual failure
 
