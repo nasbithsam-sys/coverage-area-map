@@ -73,9 +73,10 @@ function guessCoords(city: string, state: string) {
 interface Props {
   tech?: Tables<"technicians"> | null;
   onSaved: () => void;
+  logActivity?: (actionType: string, entityId: string | null, details?: Record<string, unknown>) => void;
 }
 
-export default function TechForm({ tech, onSaved }: Props) {
+export default function TechForm({ tech, onSaved, logActivity }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -186,6 +187,7 @@ export default function TechForm({ tech, onSaved }: Props) {
         toast({ title: "Duplicate phone number", description: msg, variant: "destructive" });
       } else {
         toast({ title: "Technician updated" });
+        logActivity?.("update", tech.id, { name: payload.name });
         onSaved();
       }
     } else {
@@ -195,6 +197,7 @@ export default function TechForm({ tech, onSaved }: Props) {
         toast({ title: "Duplicate phone number", description: msg, variant: "destructive" });
       } else {
         toast({ title: "Technician added" });
+        logActivity?.("create", data.id, { name: payload.name });
         onSaved();
       }
     }
