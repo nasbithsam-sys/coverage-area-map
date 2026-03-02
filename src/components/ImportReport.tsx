@@ -111,6 +111,11 @@ export default function ImportReport({
         {/* Skipped rows table */}
         {skipped.length > 0 ? (
           <>
+            <Button variant="outline" size="sm" onClick={downloadSkipped} className="self-start">
+              <Download className="h-4 w-4 mr-1.5" />
+              Download Skipped ({skipped.length})
+            </Button>
+
             <ScrollArea className="flex-1 min-h-0 max-h-[40vh] rounded-md border">
               <Table>
                 <TableHeader>
@@ -139,11 +144,6 @@ export default function ImportReport({
                 </TableBody>
               </Table>
             </ScrollArea>
-
-            <Button variant="outline" size="sm" onClick={downloadSkipped} className="self-start">
-              <Download className="h-4 w-4 mr-1.5" />
-              Download Skipped ({skipped.length})
-            </Button>
           </>
         ) : (
           <p className="text-sm text-muted-foreground py-4 text-center">
