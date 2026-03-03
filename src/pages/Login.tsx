@@ -81,44 +81,84 @@ export default function Login() {
   return (
     <main className="flex min-h-screen">
       {/* Left panel - branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
+      <motion.div
+        className="hidden lg:flex lg:w-1/2 relative overflow-hidden"
+        style={{ background: "var(--gradient-primary)" }}
+        initial={{ x: -60, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      >
         <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-white/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+          <motion.div
+            className="absolute top-20 left-10 w-72 h-72 bg-white/20 rounded-full blur-3xl"
+            animate={{ scale: [1, 1.15, 1], opacity: [0.1, 0.2, 0.1] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute bottom-20 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl"
+            animate={{ scale: [1, 1.1, 1], opacity: [0.08, 0.15, 0.08] }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+          />
         </div>
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
-          <div className="flex items-center gap-3 mb-8">
+          <motion.div
+            className="flex items-center gap-3 mb-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+          >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
               <MapPin className="h-6 w-6" />
             </div>
             <span className="text-2xl font-bold tracking-tight">TechMap</span>
-          </div>
-          <h1 className="text-4xl font-extrabold leading-tight tracking-tight mb-4">
+          </motion.div>
+          <motion.h1
+            className="text-4xl font-extrabold leading-tight tracking-tight mb-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45, duration: 0.5 }}
+          >
             Technician Coverage<br />Intelligence Platform
-          </h1>
-          <p className="text-lg text-white/70 mb-12 max-w-md">
+          </motion.h1>
+          <motion.p
+            className="text-lg text-white/70 mb-12 max-w-md"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.55, duration: 0.5 }}
+          >
             Visualize, manage, and optimize your technician network across the entire United States.
-          </p>
+          </motion.p>
           <div className="space-y-5">
             {[
               { icon: Eye, label: "Real-time coverage visualization" },
               { icon: Users, label: "Manage thousands of technicians" },
               { icon: Zap, label: "Instant search & nearest tech finder" },
-            ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-3 text-white/80">
+            ].map(({ icon: Icon, label }, i) => (
+              <motion.div
+                key={label}
+                className="flex items-center gap-3 text-white/80"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.65 + i * 0.12, duration: 0.4 }}
+              >
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
                   <Icon className="h-4 w-4" />
                 </div>
                 <span className="text-sm font-medium">{label}</span>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Right panel - form */}
-      <div className="flex-1 flex items-center justify-center bg-background px-6">
-        <div className="w-full max-w-sm animate-fade-in">
+      <motion.div
+        className="flex-1 flex items-center justify-center bg-background px-6"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="w-full max-w-sm">
           <div className="flex items-center gap-2 mb-8 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-btn">
               <MapPin className="h-5 w-5 text-primary-foreground" />
