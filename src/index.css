@@ -144,13 +144,14 @@
   }
 
   .stat-card {
-    @apply relative overflow-hidden rounded-xl border border-border/50 bg-card p-5 transition-all duration-300;
+    @apply relative overflow-hidden rounded-xl border border-border/50 bg-card p-5 transition-all duration-300 ease-out;
     box-shadow: var(--shadow-card);
+    will-change: transform, box-shadow;
   }
 
   .stat-card:hover {
     box-shadow: var(--shadow-card-hover);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
   }
 
   .stat-card::before {
