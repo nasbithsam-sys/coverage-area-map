@@ -5,11 +5,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Download, Database } from "lucide-react";
+import { Upload, Download, Database, ChevronDown } from "lucide-react";
 import { formatPhone, stripPhone } from "@/lib/phoneUtils";
-import { correctCitySpelling, correctStateSpelling } from "@/lib/locationUtils";
+import { correctCitySpelling, correctStateSpelling, correctSpecialty } from "@/lib/locationUtils";
+import { fetchAllTechnicians } from "@/lib/fetchAllTechnicians";
 import type { Tables } from "@/integrations/supabase/types";
 import ImportReport, { type SkippedRow } from "@/components/ImportReport";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Props {
   onImported: () => void;
@@ -27,6 +34,7 @@ export default function TechImport({ onImported, technicians, role }: Props) {
   const [importStatus, setImportStatus] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const [seedingCities, setSeedingCities] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Import report state
   const [reportOpen, setReportOpen] = useState(false);
@@ -70,29 +78,86 @@ export default function TechImport({ onImported, technicians, role }: Props) {
     }
   };
 
-  const exportCSV = () => {
-    const rows = [CSV_HEADERS.join(",")];
-    technicians.forEach((t) => {
-      rows.push([
-        `"${t.name}"`,
-        `"${t.phone || ""}"`,
-        `"${t.email || ""}"`,
-        `"${t.city}"`,
-        `"${t.state}"`,
-        `"${t.zip}"`,
-        t.latitude,
-        t.longitude,
-        t.service_radius_miles,
-        `"${(t.specialty || []).join(";")}"`,
-        `"${t.priority || "normal"}"`,
-        `"${(t.notes || "").replace(/"/g, '""')}"`,
-      ].join(","));
-    });
-    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const buildExportRows = (allTechs: Tables<"technicians">[]) => {
+    return allTechs.map((t) => [
+      t.name,
+      t.phone || "",
+      t.email || "",
+      t.city,
+      t.state,
+      t.zip,
+      t.latitude,
+      t.longitude,
+      t.service_radius_miles,
+      (t.specialty || []).join(";"),
+      t.priority || "normal",
+      (t.notes || "").replace(/"/g, '""'),
+    ]);
+  };
+
+  const exportCSV = async () => {
+    setExporting(true);
+    toast({ title: "Exporting...", description: "Fetching all technicians" });
+    try {
+      const allTechs = await fetchAllTechnicians();
+      const rows = [CSV_HEADERS.join(",")];
+      buildExportRows(allTechs).forEach((cols) => {
+        rows.push(cols.map((c) => `"${c}"`).join(","));
+      });
+      downloadBlob(new Blob([rows.join("\n")], { type: "text/csv" }), "technicians.csv");
+      toast({ title: "Exported", description: `${allTechs.length} technicians exported as CSV` });
+    } catch (err: any) {
+      toast({ title: "Export error", description: err.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportXLSX = async () => {
+    setExporting(true);
+    toast({ title: "Exporting...", description: "Fetching all technicians" });
+    try {
+      const allTechs = await fetchAllTechnicians();
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Technicians");
+      ws.addRow(CSV_HEADERS);
+      buildExportRows(allTechs).forEach((row) => ws.addRow(row));
+      // Style header row
+      ws.getRow(1).font = { bold: true };
+      ws.columns.forEach((col) => { col.width = 18; });
+      const buffer = await wb.xlsx.writeBuffer();
+      downloadBlob(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "technicians.xlsx");
+      toast({ title: "Exported", description: `${allTechs.length} technicians exported as XLSX` });
+    } catch (err: any) {
+      toast({ title: "Export error", description: err.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportTSV = async () => {
+    setExporting(true);
+    toast({ title: "Exporting...", description: "Fetching all technicians" });
+    try {
+      const allTechs = await fetchAllTechnicians();
+      const rows = [CSV_HEADERS.join("\t")];
+      buildExportRows(allTechs).forEach((cols) => {
+        rows.push(cols.map((c) => String(c).replace(/\t/g, " ")).join("\t"));
+      });
+      downloadBlob(new Blob([rows.join("\n")], { type: "text/tab-separated-values" }), "technicians.tsv");
+      toast({ title: "Exported", description: `${allTechs.length} technicians exported as TSV` });
+    } catch (err: any) {
+      toast({ title: "Export error", description: err.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "technicians.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -155,13 +220,12 @@ export default function TechImport({ onImported, technicians, role }: Props) {
       };
 
       const parsed: ParsedRow[] = [];
-      const phonesSeen = new Map<string, number>(); // phone digits → first row number
+      const phonesSeen = new Map<string, number>();
 
       for (let idx = 0; idx < dataLines.length; idx++) {
         const cols = dataLines[idx];
-        const rowNum = idx + 1; // 1-based for display
+        const rowNum = idx + 1;
 
-        // Too few columns
         if (cols.length < 5) {
           skipped.push({ row: rowNum, name: cols[0]?.trim() || "", phone: cols[1]?.trim() || "", cityState: "", reason: "Row too short" });
           continue;
@@ -171,13 +235,11 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         const rawCity = cols[3]?.trim() || "";
         const rawState = cols[4]?.trim() || "";
 
-        // Missing name
         if (!name) {
           skipped.push({ row: rowNum, name: "", phone: cols[1]?.trim() || "", cityState: `${rawCity}, ${rawState}`, reason: "Missing name" });
           continue;
         }
 
-        // Missing city or state
         if (!rawCity || !rawState) {
           skipped.push({ row: rowNum, name, phone: cols[1]?.trim() || "", cityState: `${rawCity}, ${rawState}`, reason: "Missing city/state" });
           continue;
@@ -188,13 +250,11 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         const rawPhone = cols[1]?.trim() || "";
         const phoneDigits = stripPhone(rawPhone);
 
-        // Invalid phone (not 10 digits, but only if phone was provided)
         if (rawPhone && phoneDigits.length !== 10) {
           skipped.push({ row: rowNum, name, phone: rawPhone, cityState: `${city}, ${state}`, reason: `Invalid phone (${phoneDigits.length} digits)` });
           continue;
         }
 
-        // Duplicate phone in file
         if (phoneDigits.length === 10) {
           const firstSeen = phonesSeen.get(phoneDigits);
           if (firstSeen !== undefined) {
@@ -206,6 +266,10 @@ export default function TechImport({ onImported, technicians, role }: Props) {
 
         const phone = phoneDigits.length === 10 ? formatPhone(rawPhone) : rawPhone || null;
 
+        // Auto-correct specialties
+        const rawSpecialty = cols[9] ? cols[9].split(";").map((s) => s.trim()).filter(Boolean) : null;
+        const correctedSpecialty = rawSpecialty ? rawSpecialty.map(correctSpecialty) : null;
+
         parsed.push({
           rowNum,
           name,
@@ -216,26 +280,26 @@ export default function TechImport({ onImported, technicians, role }: Props) {
           rawLat: cols[6]?.trim() || "",
           rawLng: cols[7]?.trim() || "",
           radius: parseInt(cols[8]) || 25,
-          specialty: cols[9] ? cols[9].split(";").map((s) => s.trim()).filter(Boolean) : null,
+          specialty: correctedSpecialty,
           priority: ["best", "normal", "last"].includes(cols[10]?.trim()?.toLowerCase()) ? cols[10].trim().toLowerCase() : "normal",
           notes: cols[11]?.trim() || null,
         });
       }
 
-      // ── Check duplicate phones against database ──
+      // ── Check duplicate phones against database (single batch query) ──
       const validPhones = parsed.filter(r => r.phone).map(r => stripPhone(r.phone!)).filter(d => d.length === 10);
       if (validPhones.length > 0) {
         setImportStatus("Checking for duplicate phone numbers...");
+        // Fetch all existing phones in one query using the existing utility
         const { data: existingTechs } = await supabase
           .from("technicians")
-          .select("id, name, phone")
+          .select("phone")
           .not("phone", "is", null);
         if (existingTechs) {
           const existingPhones = new Set<string>();
           for (const t of existingTechs) {
             if (t.phone) existingPhones.add(stripPhone(t.phone));
           }
-          // Remove DB duplicates from parsed, add to skipped
           const kept: ParsedRow[] = [];
           for (const row of parsed) {
             if (row.phone && existingPhones.has(stripPhone(row.phone))) {
@@ -272,9 +336,17 @@ export default function TechImport({ onImported, technicians, role }: Props) {
       const uniqueZips = [...zipsNeeded];
       if (uniqueZips.length > 0) {
         setImportStatus(`Looking up ${uniqueZips.length} ZIP centroids...`);
+        // Fetch all ZIP centroids in parallel batches
+        const zipBatches = [];
         for (let i = 0; i < uniqueZips.length; i += 500) {
-          const batch = uniqueZips.slice(i, i + 500);
-          const { data } = await supabase.from("zip_centroids").select("zip, latitude, longitude").in("zip", batch);
+          zipBatches.push(uniqueZips.slice(i, i + 500));
+        }
+        const zipResults = await Promise.all(
+          zipBatches.map(batch =>
+            supabase.from("zip_centroids").select("zip, latitude, longitude").in("zip", batch)
+          )
+        );
+        for (const { data } of zipResults) {
           if (data) {
             for (const row of data) {
               centroidMap[row.zip] = { latitude: row.latitude, longitude: row.longitude };
@@ -283,7 +355,7 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         }
       }
 
-      // City centroid fallback
+      // City centroid fallback — batch all lookups in parallel
       const needsCityLookup: Set<string> = new Set();
       for (const row of parsed) {
         const lat = parseFloat(row.rawLat);
@@ -302,20 +374,26 @@ export default function TechImport({ onImported, technicians, role }: Props) {
       if (needsCityLookup.size > 0) {
         setImportStatus(`Looking up ${needsCityLookup.size} city centroids...`);
         const cityPairs = [...needsCityLookup].map(k => { const [c, s] = k.split("|"); return { city: c, state: s }; });
-        for (const pair of cityPairs) {
-          const { data } = await supabase
-            .from("city_centroids")
-            .select("city, state, latitude, longitude, zip")
-            .ilike("city", pair.city)
-            .eq("state", pair.state)
-            .limit(1);
+        // Parallel city lookups
+        const cityResults = await Promise.all(
+          cityPairs.map(pair =>
+            supabase
+              .from("city_centroids")
+              .select("city, state, latitude, longitude, zip")
+              .ilike("city", pair.city)
+              .eq("state", pair.state)
+              .limit(1)
+              .then(res => ({ pair, data: res.data }))
+          )
+        );
+        for (const { pair, data } of cityResults) {
           if (data && data.length > 0) {
             cityCentroidMap[`${pair.city}|${pair.state}`] = { latitude: data[0].latitude, longitude: data[0].longitude, zip: data[0].zip };
           }
         }
       }
 
-      // ── Build final records, flag rows with no coordinates ──
+      // ── Build final records ──
       setImportStatus(`Inserting ${parsed.length} technicians...`);
       const records: { record: any; rowNum: number }[] = [];
 
@@ -340,7 +418,6 @@ export default function TechImport({ onImported, technicians, role }: Props) {
                 row.zip = cityCentroid.zip;
               }
             } else {
-              // No coordinates found — skip this row
               skipped.push({ row: row.rowNum, name: row.name, phone: row.phone || "", cityState: `${row.city}, ${row.state}`, reason: "No coordinates found" });
               continue;
             }
@@ -369,7 +446,6 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         const { error } = await supabase.from("technicians").insert(batch.map(b => b.record));
 
         if (error) {
-          // Fallback: insert one-by-one
           for (const item of batch) {
             const { error: singleErr } = await supabase.from("technicians").insert(item.record);
             if (singleErr) {
@@ -420,10 +496,26 @@ export default function TechImport({ onImported, technicians, role }: Props) {
         )}
         {role === "admin" && (
           <>
-            <Button variant="outline" size="sm" onClick={exportCSV}>
-              <Download className="h-4 w-4 mr-1.5" />
-              Export
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={exporting}>
+                  <Download className="h-4 w-4 mr-1.5" />
+                  {exporting ? "Exporting..." : "Export"}
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportCSV}>
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportXLSX}>
+                  Export as XLSX (Excel)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportTSV}>
+                  Export as TSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" size="sm" onClick={seedZipCentroids} disabled={seeding}>
               <Database className="h-4 w-4 mr-1.5" />
               {seeding ? "Loading ZIPs..." : "Seed ZIPs"}

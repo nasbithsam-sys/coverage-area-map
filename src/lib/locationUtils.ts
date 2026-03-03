@@ -71,6 +71,42 @@ const CITY_CORRECTIONS: Record<string, string> = {
   "kansascity": "Kansas City", "kansas cty": "Kansas City",
 };
 
+// Common specialty / service category misspellings → correct spelling
+const SPECIALTY_CORRECTIONS: Record<string, string> = {
+  "applianc": "Appliance", "appliance": "Appliance", "appliances": "Appliance",
+  "appliace": "Appliance", "applaince": "Appliance", "apliance": "Appliance",
+  "hvac": "HVAC", "h.v.a.c": "HVAC", "h.v.a.c.": "HVAC",
+  "plumbing": "Plumbing", "plumbin": "Plumbing", "plumming": "Plumbing", "plubming": "Plumbing",
+  "electrial": "Electrical", "electrical": "Electrical", "eletrical": "Electrical",
+  "electrcal": "Electrical", "electricl": "Electrical", "elecrrical": "Electrical",
+  "refreigerator": "Refrigerator", "refrigerator": "Refrigerator", "refridgerator": "Refrigerator",
+  "refrigeraor": "Refrigerator", "refridgeration": "Refrigeration", "refrigeration": "Refrigeration",
+  "washer": "Washer", "wahser": "Washer", "washre": "Washer",
+  "dryer": "Dryer", "drier": "Dryer", "dryre": "Dryer",
+  "dishwasher": "Dishwasher", "dishwahser": "Dishwasher", "diswasher": "Dishwasher",
+  "microwave": "Microwave", "mircowave": "Microwave", "micorwave": "Microwave",
+  "oven": "Oven", "ovne": "Oven",
+  "stove": "Stove", "sotve": "Stove",
+  "furnace": "Furnace", "furnce": "Furnace", "furnase": "Furnace",
+  "air conditioner": "Air Conditioner", "air condtioner": "Air Conditioner",
+  "ac": "AC", "a/c": "AC", "a.c.": "AC",
+  "heating": "Heating", "heatin": "Heating", "heatng": "Heating",
+  "cooling": "Cooling", "coolin": "Cooling",
+  "garage door": "Garage Door", "garagedoor": "Garage Door", "garag door": "Garage Door",
+  "water heater": "Water Heater", "waterheater": "Water Heater", "water hetar": "Water Heater",
+  "disposal": "Disposal", "disposle": "Disposal", "garbagedisposal": "Garbage Disposal",
+  "garbage disposal": "Garbage Disposal",
+  "ice maker": "Ice Maker", "icemaker": "Ice Maker", "ice makr": "Ice Maker",
+  "compactor": "Compactor", "compater": "Compactor", "trash compactor": "Trash Compactor",
+  "range": "Range", "rnage": "Range",
+  "freezer": "Freezer", "frezzer": "Freezer", "freeser": "Freezer",
+  "wine cooler": "Wine Cooler", "winecooler": "Wine Cooler",
+  "general": "General", "genral": "General", "genaral": "General",
+  "maintenance": "Maintenance", "maintanence": "Maintenance", "maintenace": "Maintenance",
+  "repair": "Repair", "repiar": "Repair", "repare": "Repair",
+  "installation": "Installation", "instalation": "Installation", "instlation": "Installation",
+};
+
 // Common state abbreviation misspellings
 const STATE_CORRECTIONS: Record<string, string> = {
   "te": "TX", "tx.": "TX", "tex": "TX",
