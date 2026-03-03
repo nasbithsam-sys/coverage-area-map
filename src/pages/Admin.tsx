@@ -84,8 +84,20 @@ export default function Admin() {
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+      <motion.div
+        className="p-6 space-y-6"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <motion.h1
+          className="text-2xl font-bold"
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35 }}
+        >
+          Admin Dashboard
+        </motion.h1>
 
         <Tabs defaultValue="analytics">
           <TabsList>
