@@ -15,8 +15,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Download, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { Download, CheckCircle2, AlertTriangle, XCircle, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import ExcelJS from "exceljs";
 
 export interface SkippedRow {
   row: number;
