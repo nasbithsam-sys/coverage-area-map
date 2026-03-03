@@ -125,6 +125,8 @@ export default function Admin() {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}>
               <Card>
                 <CardHeader><CardTitle>Active vs Inactive</CardTitle></CardHeader>
                 <CardContent className="flex justify-center">
