@@ -110,6 +110,8 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -119,6 +121,16 @@
 
   code, pre {
     font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Smooth transitions globally */
+  button, a, input, select, textarea {
+    transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
   }
 }
 
@@ -132,13 +144,14 @@
   }
 
   .stat-card {
-    @apply relative overflow-hidden rounded-xl border border-border/50 bg-card p-5 transition-all duration-300;
+    @apply relative overflow-hidden rounded-xl border border-border/50 bg-card p-5 transition-all duration-300 ease-out;
     box-shadow: var(--shadow-card);
+    will-change: transform, box-shadow;
   }
 
   .stat-card:hover {
     box-shadow: var(--shadow-card-hover);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
   }
 
   .stat-card::before {
@@ -171,12 +184,12 @@
   }
 
   .nav-item {
-    @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200;
+    @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out;
   }
 
   .nav-item::before {
     content: '';
-    @apply absolute left-0 top-1/2 h-0 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary transition-all duration-200;
+    @apply absolute left-0 top-1/2 h-0 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary transition-all duration-300 ease-out;
   }
 
   .nav-item.active::before {
@@ -189,6 +202,7 @@
 
   .nav-item:not(.active):hover {
     @apply bg-sidebar-accent/50 text-sidebar-accent-foreground;
+    transform: translateX(2px);
   }
 
   .map-container {

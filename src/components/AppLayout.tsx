@@ -6,6 +6,7 @@ import { MapPin, Users, Shield, LogOut, ChevronRight, Menu, Moon, Sun } from "lu
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const navItems = [
   { path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "processor", "admin"] as const },
@@ -63,16 +64,23 @@ function SidebarContent({ role, user, signOut, visibleNav, location, onNavigate 
       </div>
 
       <nav className="flex-1 p-3 space-y-1 mt-2 text-primary-foreground">
-        {visibleNav.map((item: any) => {
+        {visibleNav.map((item: any, i: number) => {
           const active = location.pathname === item.path;
           return (
-            <Link key={item.path} to={item.path} onClick={onNavigate}>
-              <div className={cn("nav-item", active && "active")}>
-                <item.icon className="h-[18px] w-[18px]" />
-                <span className="flex-1">{item.label}</span>
-                {active && <ChevronRight className="h-3.5 w-3.5 opacity-40" />}
-              </div>
-            </Link>
+            <motion.div
+              key={item.path}
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 + i * 0.06, duration: 0.3, ease: "easeOut" }}
+            >
+              <Link to={item.path} onClick={onNavigate}>
+                <div className={cn("nav-item", active && "active")}>
+                  <item.icon className="h-[18px] w-[18px]" />
+                  <span className="flex-1">{item.label}</span>
+                  {active && <ChevronRight className="h-3.5 w-3.5 opacity-40" />}
+                </div>
+              </Link>
+            </motion.div>
           );
         })}
       </nav>

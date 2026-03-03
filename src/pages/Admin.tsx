@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { format } from "date-fns";
+import { motion } from "framer-motion";
 import type { Tables, Database } from "@/integrations/supabase/types";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -83,8 +84,20 @@ export default function Admin() {
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+      <motion.div
+        className="p-6 space-y-6"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <motion.h1
+          className="text-2xl font-bold"
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35 }}
+        >
+          Admin Dashboard
+        </motion.h1>
 
         <Tabs defaultValue="analytics">
           <TabsList>
@@ -97,6 +110,7 @@ export default function Admin() {
           {/* Analytics */}
           <TabsContent value="analytics" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
               <Card>
                 <CardHeader><CardTitle>Technicians by State (Top 10)</CardTitle></CardHeader>
                 <CardContent>
@@ -111,6 +125,8 @@ export default function Admin() {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}>
               <Card>
                 <CardHeader><CardTitle>Active vs Inactive</CardTitle></CardHeader>
                 <CardContent className="flex justify-center">
@@ -124,6 +140,7 @@ export default function Admin() {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
+              </motion.div>
             </div>
           </TabsContent>
 
@@ -172,7 +189,7 @@ export default function Admin() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+      </motion.div>
     </AppLayout>
   );
 }
