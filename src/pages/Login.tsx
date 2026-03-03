@@ -172,29 +172,31 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleSignIn} className="space-y-5">
-            <div className="space-y-2">
+            <motion.div className="space-y-2" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
               <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
               <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
-            </div>
-            <div className="space-y-2">
+            </motion.div>
+            <motion.div className="space-y-2" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
               <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
               <Input id="password" name="password" type="password" required autoComplete="current-password" placeholder="••••••••" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors" />
-            </div>
-            <div className="space-y-2">
+            </motion.div>
+            <motion.div className="space-y-2" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
               <Label htmlFor="otp" className="text-sm font-semibold">Authenticator Code</Label>
               <Input id="otp" name="otp" type="text" required autoComplete="one-time-code" maxLength={6} placeholder="6-digit code" className="h-11 rounded-xl bg-muted/30 border-border/50 focus:bg-background transition-colors tracking-widest text-center font-mono" />
-            </div>
-            <Button type="submit" className="w-full h-11 rounded-xl gradient-btn text-sm" disabled={loading}>
-              {loading ? "Signing in..." : (
-                <span className="flex items-center gap-2">Sign In <ArrowRight className="h-4 w-4" /></span>
-              )}
-            </Button>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+              <Button type="submit" className="w-full h-11 rounded-xl gradient-btn text-sm" disabled={loading}>
+                {loading ? "Signing in..." : (
+                  <span className="flex items-center gap-2">Sign In <ArrowRight className="h-4 w-4" /></span>
+                )}
+              </Button>
+            </motion.div>
             <p className="text-xs text-muted-foreground text-center">
               Contact your administrator for login credentials and OTP code
             </p>
           </form>
         </div>
-      </div>
+      </motion.div>
     </main>
   );
 }

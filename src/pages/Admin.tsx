@@ -189,7 +189,7 @@ export default function Admin() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+      </motion.div>
     </AppLayout>
   );
 }
