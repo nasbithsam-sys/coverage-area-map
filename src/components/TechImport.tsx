@@ -268,7 +268,7 @@ export default function TechImport({ onImported, technicians, role }: Props) {
 
         // Auto-correct specialties
         const rawSpecialty = cols[9] ? cols[9].split(";").map((s) => s.trim()).filter(Boolean) : null;
-        const correctedSpecialty = rawSpecialty ? rawSpecialty.map(correctSpecialty) : null;
+        const correctedSpecialty: string[] | null = rawSpecialty ? rawSpecialty.map(correctSpecialty) : null;
 
         parsed.push({
           rowNum,

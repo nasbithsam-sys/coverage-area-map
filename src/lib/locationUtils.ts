@@ -140,6 +140,17 @@ const STATE_CORRECTIONS: Record<string, string> = {
 };
 
 /**
+ * Correct common specialty/service category misspellings.
+ * Returns the corrected specialty or the original with proper casing.
+ */
+export function correctSpecialty(specialty: string): string {
+  const lower = specialty.toLowerCase().trim();
+  if (SPECIALTY_CORRECTIONS[lower]) return SPECIALTY_CORRECTIONS[lower];
+  // Title case the original
+  return specialty.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
  * Correct common city name misspellings.
  * Returns the corrected city name or the original with proper casing.
  */
