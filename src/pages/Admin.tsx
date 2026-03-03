@@ -140,6 +140,7 @@ export default function Admin() {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
+              </motion.div>
             </div>
           </TabsContent>
 
