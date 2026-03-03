@@ -48,7 +48,7 @@ export default function ImportReport({
   importedCount,
   skipped,
 }: ImportReportProps) {
-  const downloadSkipped = () => {
+  const downloadSkippedCSV = () => {
     const headers = ["Row #", "Name", "Phone", "City/State", "Reason"];
     const csvRows = [headers.join(",")];
     for (const s of skipped) {
@@ -61,6 +61,28 @@ export default function ImportReport({
     const a = document.createElement("a");
     a.href = url;
     a.download = "skipped-technicians.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadSkippedXLSX = async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Skipped Rows");
+    ws.columns = [
+      { header: "Row #", key: "row", width: 8 },
+      { header: "Name", key: "name", width: 20 },
+      { header: "Phone", key: "phone", width: 16 },
+      { header: "City/State", key: "cityState", width: 22 },
+      { header: "Reason", key: "reason", width: 28 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    for (const s of skipped) ws.addRow(s);
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "skipped-technicians.xlsx";
     a.click();
     URL.revokeObjectURL(url);
   };
