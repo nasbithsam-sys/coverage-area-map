@@ -96,19 +96,7 @@ export default function ImportReport({
           </div>
         </div>
 
-        {/* Reason breakdown */}
-        {skipped.length > 0 && (
-          <div className="flex flex-wrap gap-2 pb-2">
-            {Object.entries(reasonCounts).map(([reason, count]) => (
-              <Badge key={reason} variant="outline" className="text-xs">
-                <AlertTriangle className="h-3 w-3 mr-1 text-amber-500" />
-                {reason}: {count}
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        {/* Skipped rows table */}
+        {/* Download button + Skipped rows */}
         {skipped.length > 0 ? (
           <>
             <Button variant="outline" size="sm" onClick={downloadSkipped} className="self-start">
@@ -116,7 +104,17 @@ export default function ImportReport({
               Download Skipped ({skipped.length})
             </Button>
 
-            <ScrollArea className="flex-1 min-h-0 max-h-[40vh] rounded-md border">
+            <ScrollArea className="flex-1 min-h-0 max-h-[50vh] rounded-md border">
+              {/* Reason breakdown inside scroll */}
+              <div className="flex flex-wrap gap-2 p-3 border-b sticky top-0 bg-background z-10">
+                {Object.entries(reasonCounts).map(([reason, count]) => (
+                  <Badge key={reason} variant="outline" className="text-xs">
+                    <AlertTriangle className="h-3 w-3 mr-1 text-amber-500" />
+                    {reason}: {count}
+                  </Badge>
+                ))}
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
