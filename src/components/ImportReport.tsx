@@ -128,10 +128,19 @@ export default function ImportReport({
         {/* Download button + Skipped rows */}
         {skipped.length > 0 ? (
           <>
-            <Button variant="outline" size="sm" onClick={downloadSkipped} className="self-start">
-              <Download className="h-4 w-4 mr-1.5" />
-              Download Skipped ({skipped.length})
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="self-start">
+                  <Download className="h-4 w-4 mr-1.5" />
+                  Download Skipped ({skipped.length})
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={downloadSkippedCSV}>Download as CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={downloadSkippedXLSX}>Download as Excel (.xlsx)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <ScrollArea className="flex-1 min-h-0 max-h-[50vh] rounded-md border">
               {/* Reason breakdown inside scroll */}
