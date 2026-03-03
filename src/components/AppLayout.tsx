@@ -6,6 +6,7 @@ import { MapPin, Users, Shield, LogOut, ChevronRight, Menu, Moon, Sun } from "lu
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const navItems = [
   { path: "/dashboard", label: "Coverage Map", icon: MapPin, roles: ["marketing", "processor", "admin"] as const },
