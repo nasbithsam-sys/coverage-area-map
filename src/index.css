@@ -184,12 +184,12 @@
   }
 
   .nav-item {
-    @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200;
+    @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out;
   }
 
   .nav-item::before {
     content: '';
-    @apply absolute left-0 top-1/2 h-0 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary transition-all duration-200;
+    @apply absolute left-0 top-1/2 h-0 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary transition-all duration-300 ease-out;
   }
 
   .nav-item.active::before {
@@ -202,6 +202,7 @@
 
   .nav-item:not(.active):hover {
     @apply bg-sidebar-accent/50 text-sidebar-accent-foreground;
+    transform: translateX(2px);
   }
 
   .map-container {
